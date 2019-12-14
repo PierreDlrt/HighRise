@@ -7,14 +7,20 @@ import android.support.v7.app.AppCompatActivity;
 import android.util.Log;
 import android.view.View;
 import android.widget.Button;
+import android.widget.EditText;
 import android.widget.TextView;
 
 public class DroneActivity extends AppCompatActivity {
 
+    public static final String TAG = DroneActivity.class.getSimpleName();
+
     TcpClient mTcpClient;
     TextView tv;
+    EditText editText;
 
     public static String IP_addr;
+
+    private int buf[] = new int[1000];
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -25,6 +31,7 @@ public class DroneActivity extends AppCompatActivity {
         Button btnConnect = findViewById(R.id.btnConnect);
         Button btnSend = findViewById(R.id.btnSend);
         tv = findViewById(R.id.textView);
+        editText = findViewById(R.id.editText);
 
         Intent intent = getIntent();
         IP_addr = intent.getStringExtra("IP_ADDR");
@@ -32,32 +39,51 @@ public class DroneActivity extends AppCompatActivity {
         btnConnect.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-                connectTask.execute("");
+                connectTask.execute();
             }
         });
 
         btnSend.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
+                String message = editText.getText().toString();
+                //sends the message to the server
                 if (mTcpClient != null) {
-                    mTcpClient.sendMessage("testing");
+                    new SendMessageTask().execute(message);
                 }
+                editText.setText("");
             }
         });
     }
 
-    public class ConnectTask extends AsyncTask<String, String, TcpClient> {
+    /**
+     * Sends a message using a background task to avoid doing long/network operations on the UI thread
+     */
+    public class SendMessageTask extends AsyncTask<String, Void, Void> {
 
         @Override
-        protected TcpClient doInBackground(String... message) {
+        protected Void doInBackground(String... params) {
+
+            // send the message
+            mTcpClient.sendMessage(params[0]);
+
+            return null;
+        }
+    }
+
+    public class ConnectTask extends AsyncTask<Integer, Integer, TcpClient> {
+
+        @Override
+        protected TcpClient doInBackground(Integer... message) {
 
             //we create a TCPClient object
             mTcpClient = new TcpClient(new TcpClient.OnMessageReceived() {
                 @Override
                 //here the messageReceived method is implemented
-                public void messageReceived(String message) {
+                public void messageReceived(int message) {
                     //this method calls the onProgressUpdate
                     publishProgress(message);
+                    //Log.d(TAG, "messageReceived: "+message);
                 }
             });
             mTcpClient.run();
@@ -65,14 +91,15 @@ public class DroneActivity extends AppCompatActivity {
             return null;
         }
 
-        @Override
-        protected void onProgressUpdate(String... values) {
+        /*@Override
+        protected void onProgressUpdate(Integer... values) {
             super.onProgressUpdate(values);
             //response received from server
+            //
             Log.d("test", "response " + values[0]);
             tv.setText(values[0]);
             //process server response here....
-        }
+        }*/
     }
 
 }

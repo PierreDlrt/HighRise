@@ -21,7 +21,7 @@ public class TcpClient {
     public String SERVER_IP;// = "192.168.0.100"; //server IP address
     public static final int SERVER_PORT = 5001;
     // message to send to the server
-    private String mServerMessage;
+    private int mServerMessage;
     // sends message received notifications
     private OnMessageReceived mMessageListener = null;
     // while this is true, the server will continue running
@@ -75,7 +75,7 @@ public class TcpClient {
         mMessageListener = null;
         mBufferIn = null;
         mBufferOut = null;
-        mServerMessage = null;
+        //mServerMessage = null;
     }
 
     public void run() {
@@ -99,15 +99,18 @@ public class TcpClient {
                 mBufferIn = new BufferedReader(new InputStreamReader(socket.getInputStream()));
                 //in this while the client listens for the messages sent by the server
                 while (mRun) {
-                    Log.d(TAG, "run: entered mRun");
-                    mServerMessage = mBufferIn.readLine();
-
-                    if (mServerMessage != null && mMessageListener != null) {
-                        //call the method messageReceived from MyActivity class
-                        Log.d(TAG, "run: message received");
-                        mMessageListener.messageReceived(mServerMessage);
+                    //Log.d(TAG, "run: entered mRun");
+                    if(mBufferIn.ready()) {
+                        //Log.d(TAG, "run: ready");
+                        //Log.d(TAG, "run: read:"+mBufferIn.read());
+                        mServerMessage = mBufferIn.read();
+                        if (mServerMessage != -1 && mMessageListener != null) {
+                            //call the method messageReceived from MyActivity class
+                            //Log.d(TAG, "run: message received");
+                            mMessageListener.messageReceived(mServerMessage);
+                        }
+                        //Log.d(TAG, "run: message null");
                     }
-                    Log.d(TAG, "run: message null");
                 }
             } catch (Exception e) {
                 Log.e("TCP", "S: Error", e);
@@ -124,6 +127,6 @@ public class TcpClient {
     //Declare the interface. The method messageReceived(String message) will must be implemented in the Activity
     //class at on AsyncTask doInBackground
     public interface OnMessageReceived {
-        public void messageReceived(String message);
+        public void messageReceived(int message);
     }
 }
