@@ -99,7 +99,7 @@
 
 #define PORT_NUM            5001
 #define BUF_SIZE            1000
-#define TCP_PACKET_COUNT    127
+#define TCP_PACKET_COUNT    50
 
 // Application specific status/error codes
 typedef enum{
@@ -737,6 +737,7 @@ void ServerTCP( void *pvParameters )
     //long            lLoopCount = 0;
     long            lNonBlocking = 1;
     int             iTestBufLen;
+    size_t          lenfdp;
 
     taskParam *pxParameters;
     pxParameters = (taskParam*) pvParameters;
@@ -747,8 +748,12 @@ void ServerTCP( void *pvParameters )
     // filling the buffer
     for (iCounter=0 ; iCounter<TCP_PACKET_COUNT ; iCounter++)
     {
-        g_cBsdSendBuf[iCounter] = (char)(iCounter);
+        g_cBsdSendBuf[iCounter] = (char)(iCounter+65);
+        //UART_PRINT("icounter=%d", iCounter);
     }
+
+    lenfdp = strlen(g_cBsdSendBuf);
+    UART_PRINT("len start = %d\n\r", lenfdp);
 
     iTestBufLen  = BUF_SIZE;
 
@@ -801,130 +806,136 @@ void ServerTCP( void *pvParameters )
             LOOP_FOREVER();
         }
     }
-
-    while(!IS_IP_ACQUIRED(g_ulStatus))
-    {
-      //looping till ip is acquired
-    }
-
-    unsigned char len = sizeof(SlNetCfgIpV4Args_t);
-    SlNetCfgIpV4Args_t ipV4 = {0};
-
-    // get network configuration
-    lRetVal = sl_NetCfgGet(SL_IPV4_AP_P2P_GO_GET_INFO,&ucDHCP,&len,
-                            (unsigned char *)&ipV4);
-    if (lRetVal < 0)
-    {
-        UART_PRINT("Failed to get network configuration \n\r");
-        LOOP_FOREVER();
-    }
-
-    while(1){
-        UART_PRINT("Connect a client to Device\n\r");
-        while(!IS_IP_LEASED(g_ulStatus))
+    while(1) {
+        while(!IS_IP_ACQUIRED(g_ulStatus))
         {
-          //wating for the client to connect
+            //looping till ip is acquired
         }
-        UART_PRINT("Client is connected to Device\n\r");
+        unsigned char len = sizeof(SlNetCfgIpV4Args_t);
+        SlNetCfgIpV4Args_t ipV4 = {0};
 
-        ////////////////////////// Client connected to Device /////////////////////////////
-
-
-        //filling the TCP server socket address
-        sLocalAddr.sin_family = SL_AF_INET;
-        sLocalAddr.sin_port = sl_Htons((unsigned short) PORT_NUM);
-        sLocalAddr.sin_addr.s_addr = 0;
-
-        // creating a TCP socket
-        iSockID = sl_Socket(SL_AF_INET,SL_SOCK_STREAM, 0);
-        if( iSockID < 0 )
+        // get network configuration
+        lRetVal = sl_NetCfgGet(SL_IPV4_AP_P2P_GO_GET_INFO,&ucDHCP,&len,
+                                (unsigned char *)&ipV4);
+        if (lRetVal < 0)
         {
-            // error
-            ASSERT_ON_ERROR(SOCKET_CREATE_ERROR);
+            UART_PRINT("Failed to get network configuration \n\r");
+            LOOP_FOREVER();
         }
-        else {
-            UART_PRINT("Socket created\n\r");
-            iAddrSize = sizeof(SlSockAddrIn_t);
 
-            // binding the TCP socket to the TCP server address
-            iStatus = sl_Bind(iSockID, (SlSockAddr_t *)&sLocalAddr, iAddrSize);
-            if( iStatus < 0 )
+        while(1){
+
+            UART_PRINT("Connect a client to Device\n\r");
+            while(!IS_IP_LEASED(g_ulStatus))
+            {
+              //waiting for the client to connect
+            }
+            UART_PRINT("Client is connected to Device\n\r");
+
+            ////////////////////////// Client connected to Device /////////////////////////////
+
+
+            //filling the TCP server socket address
+            sLocalAddr.sin_family = SL_AF_INET;
+            sLocalAddr.sin_port = sl_Htons((unsigned short) PORT_NUM);
+            sLocalAddr.sin_addr.s_addr = 0;
+
+            // creating a TCP socket
+            iSockID = sl_Socket(SL_AF_INET,SL_SOCK_STREAM, 0);
+            if( iSockID < 0 )
             {
                 // error
-                sl_Close(iSockID);
-                ERR_PRINT(BIND_ERROR);
+                ASSERT_ON_ERROR(SOCKET_CREATE_ERROR);
             }
             else {
-                UART_PRINT("Binded\n\r");
-                // putting the socket for listening to the incoming TCP connection
-                iStatus = sl_Listen(iSockID, 0);
+                UART_PRINT("Socket created\n\r");
+                iAddrSize = sizeof(SlSockAddrIn_t);
+
+                // binding the TCP socket to the TCP server address
+                iStatus = sl_Bind(iSockID, (SlSockAddr_t *)&sLocalAddr, iAddrSize);
                 if( iStatus < 0 )
                 {
+                    // error
                     sl_Close(iSockID);
-                    ERR_PRINT(LISTEN_ERROR);
+                    ERR_PRINT(BIND_ERROR);
                 }
                 else {
-                    UART_PRINT("Listening\n\r");
-                    // setting socket option to make the socket as non blocking
-                    iStatus = sl_SetSockOpt(iSockID, SL_SOL_SOCKET, SL_SO_NONBLOCKING,
-                                            &lNonBlocking, sizeof(lNonBlocking));
+                    UART_PRINT("Binded\n\r");
+                    // putting the socket for listening to the incoming TCP connection
+                    iStatus = sl_Listen(iSockID, 0);
                     if( iStatus < 0 )
                     {
                         sl_Close(iSockID);
-                        ERR_PRINT(SOCKET_OPT_ERROR);
+                        ERR_PRINT(LISTEN_ERROR);
                     }
                     else {
-                        UART_PRINT("Option set\n\rWaiting for incoming connection...\n\r");
-                        iNewSockID = SL_EAGAIN;
-
-                        // waiting for an incoming TCP connection
-                        while( iNewSockID < 0 )
+                        UART_PRINT("Listening\n\r");
+                        // setting socket option to make the socket as non blocking
+                        iStatus = sl_SetSockOpt(iSockID, SL_SOL_SOCKET, SL_SO_NONBLOCKING,
+                                                &lNonBlocking, sizeof(lNonBlocking));
+                        if( iStatus < 0 )
                         {
-                            // accepts a connection form a TCP client, if there is any
-                            // otherwise returns SL_EAGAIN
-                            iNewSockID = sl_Accept(iSockID, ( struct SlSockAddr_t *)&sAddr,
-                                                    (SlSocklen_t*)&iAddrSize);
-                            if( iNewSockID == SL_EAGAIN )
-                            {
-                               MAP_UtilsDelay(10000);
-                            }
-                            else if( iNewSockID < 0 )
-                            {
-                                // error
-                                sl_Close(iNewSockID);
-                                sl_Close(iSockID);
-                                ERR_PRINT(ACCEPT_ERROR);
-                            }
+                            sl_Close(iSockID);
+                            ERR_PRINT(SOCKET_OPT_ERROR);
                         }
-                        UART_PRINT("TCP client connected\n\r");
-                        // waits for 1000 packets from the connected TCP client
-                        while (1)
-                        {
-                            iStatus = sl_Send(iNewSockID, g_cBsdSendBuf, iTestBufLen, 0);
-                            if( iStatus <= 0 )
-                            {
-                                // error
-                                sl_Close(iNewSockID);
-                                sl_Close(iSockID);
-                                ERR_PRINT(SEND_ERROR);
-                                break;
-                            }
-                            UART_PRINT("1000 packets sent\n\r");
-                            MAP_UtilsDelay(10000);
+                        else {
+                            UART_PRINT("Option set\n\rWaiting for incoming connection...\n\r");
+                            iNewSockID = SL_EAGAIN;
 
-                            /*iStatus = sl_Recv(iNewSockID, g_cBsdRecvBuf, iTestBufLen, 0);
-                            if(iStatus == SL_POOL_IS_EMPTY){
-                                UART_PRINT("Buffer empty\n\r");
+                            // waiting for an incoming TCP connection
+                            while( iNewSockID < 0 )
+                            {
+                                // accepts a connection form a TCP client, if there is any
+                                // otherwise returns SL_EAGAIN
+                                iNewSockID = sl_Accept(iSockID, ( struct SlSockAddr_t *)&sAddr,
+                                                        (SlSocklen_t*)&iAddrSize);
+                                if( iNewSockID == SL_EAGAIN )
+                                {
+                                   MAP_UtilsDelay(10000);
+                                }
+                                else if( iNewSockID < 0 )
+                                {
+                                    // error
+                                    sl_Close(iNewSockID);
+                                    sl_Close(iSockID);
+                                    ERR_PRINT(ACCEPT_ERROR);
+                                }
                             }
-                            else {
-                                Report("")
-                            }*/
+                            UART_PRINT("TCP client connected\n\r");
+                            // waits for 1000 packets from the connected TCP client
+                            while (1)
+                            {
+
+                                iStatus = sl_Send(iNewSockID, g_cBsdSendBuf, iTestBufLen, 0);
+
+                                if( iStatus <= 0 )
+                                {
+                                    // error
+                                    sl_Close(iNewSockID);
+                                    sl_Close(iSockID);
+                                    ERR_PRINT(SEND_ERROR);
+                                    break;
+                                }
+
+                                MAP_UtilsDelay(10000);
+
+                                UART_PRINT("before recv\n\r");
+                                iStatus = sl_Recv(iNewSockID, g_cBsdRecvBuf, iTestBufLen, 0);
+                                UART_PRINT("after recv\n\r");
+
+                                if(iStatus == SL_POOL_IS_EMPTY){
+                                    UART_PRINT("Buffer empty\n\r");
+                                }
+                                else {
+                                    Report("");
+                                }
+                            }
                         }
                     }
                 }
             }
+            UART_PRINT("[TCP Server Task] Error occurred\n\r");
         }
-        UART_PRINT("[TCP Server Task] Error occurred\n\r");
     }
     while(1) { /*error if function gets here*/ }
 }
@@ -1007,7 +1018,7 @@ BoardInit(void)
 //*****************************************************************************
 void main()
 
-{
+    {
     long lRetVal = -1;
 
     //
@@ -1084,7 +1095,6 @@ void main()
         ERR_PRINT(lRetVal);
         LOOP_FOREVER();
     }
-
     //
     // Start the task scheduler
     //
