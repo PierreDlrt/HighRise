@@ -50,6 +50,7 @@ public class TcpClient {
         Runnable runnable = new Runnable() {
             @Override
             public void run() {
+                Log.d(TAG, "run: sendMessage running");
                 if (mBufferOut != null) {
                     Log.d(TAG, "Sending: " + message);
                     mBufferOut.println(message);

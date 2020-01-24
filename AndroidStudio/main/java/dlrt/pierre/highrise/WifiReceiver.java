@@ -50,7 +50,7 @@ class WifiReceiver extends BroadcastReceiver {
                 Intent myIntent = new Intent(context, DroneActivity.class);
                 //myIntent.putExtra("WifiManager", (Parcelable) WifiManager);
                 myIntent.putExtra("IP_ADDR", Formatter.formatIpAddress(wifiManager.getDhcpInfo().serverAddress)); // wifiManager.getConnectionInfo().getIpAddress()));
-                Log.d(TAG, "onReceive: Server IP="+Formatter.formatIpAddress(wifiManager.getDhcpInfo().serverAddress));
+                //Log.d(TAG, "onReceive: Server IP="+Formatter.formatIpAddress(wifiManager.getDhcpInfo().serverAddress));
                 //int ipDec = wifiManager.getConnectionInfo().getIpAddress();
                 context.startActivity(myIntent);
             }

@@ -39,7 +39,10 @@ public class DroneActivity extends AppCompatActivity {
         btnConnect.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-                connectTask.execute();
+                if (!connectTask.getStatus().equals(AsyncTask.Status.RUNNING)){
+                    connectTask.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
+                    // connectTask.execute();
+                }
             }
         });
 
@@ -49,7 +52,9 @@ public class DroneActivity extends AppCompatActivity {
                 String message = editText.getText().toString();
                 //sends the message to the server
                 if (mTcpClient != null) {
-                    new SendMessageTask().execute(message);
+                    Log.d(TAG, "onClick: SendMessageTask created");
+                    //new SendMessageTask().execute(message);
+                    new SendMessageTask().executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, message);
                 }
                 editText.setText("");
             }
@@ -65,6 +70,7 @@ public class DroneActivity extends AppCompatActivity {
         protected Void doInBackground(String... params) {
 
             // send the message
+            Log.d(TAG, "SendMessageTask: executing");
             mTcpClient.sendMessage(params[0]);
 
             return null;
@@ -83,7 +89,8 @@ public class DroneActivity extends AppCompatActivity {
                 public void messageReceived(int message) {
                     //this method calls the onProgressUpdate
                     publishProgress(message);
-                    //Log.d(TAG, "messageReceived: "+message);
+                    Log.d(TAG, "messageReceived: "+message);
+
                 }
             });
             mTcpClient.run();
