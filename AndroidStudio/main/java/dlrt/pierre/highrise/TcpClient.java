@@ -18,9 +18,8 @@ import java.io.OutputStreamWriter;
 
 public class TcpClient {
     public static final String TAG = TcpClient.class.getSimpleName();
-    public String SERVER_IP;// = "192.168.0.100"; //server IP address
+    public String SERVER_IP;// = "192.168.0.100";
     public static final int SERVER_PORT = 5001;
-    // message to send to the server
     private int mServerMessage;
     // sends message received notifications
     private OnMessageReceived mMessageListener = null;
@@ -31,21 +30,12 @@ public class TcpClient {
     // used to read messages from the server
     private BufferedReader mBufferIn;
 
-    //private  Context mcontext;
-    //private WifiManager wifiManager = (WifiManager) ((MainActivity) mcontext).getSystemService(Context.WIFI_SERVICE)
 
-    /**
-     * Constructor of the class. OnMessagedReceived listens for the messages received from server
-     */
     public TcpClient(OnMessageReceived listener) {
         mMessageListener = listener;
     }
 
-    /**
-     * Sends the message entered by client to the server
-     *
-     * @param message text entered by client
-     */
+
     public void sendMessage(final String message) {
         Runnable runnable = new Runnable() {
             @Override
@@ -93,6 +83,7 @@ public class TcpClient {
             //create a socket to make the connection with the server
             Socket socket = new Socket(serverAddr, SERVER_PORT);
             try {
+
                 Log.d(TAG, "run: socket created");
                 //sends the message to the server
                 mBufferOut = new PrintWriter(new BufferedWriter(new OutputStreamWriter(socket.getOutputStream())), true);
