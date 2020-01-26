@@ -24,7 +24,7 @@ public class TcpClient {
     // sends message received notifications
     private OnMessageReceived mMessageListener = null;
     // while this is true, the server will continue running
-    private boolean mRun = false;
+    public boolean mRun = false;
     // used to send messages
     private PrintWriter mBufferOut;
     // used to read messages from the server
