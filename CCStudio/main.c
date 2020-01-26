@@ -154,6 +154,7 @@ extern uVectorEntry __vector_table;
 
 static long ConfigureSimpleLinkToDefaultState();
 static void InitializeAppVariables();
+int connectionManager();
 
 
 
@@ -803,19 +804,19 @@ void ServerTCP( void *pvParameters )
         //looping till ip is acquired
     }
 
+    unsigned char len = sizeof(SlNetCfgIpV4Args_t);
+    SlNetCfgIpV4Args_t ipV4 = {0};
+
+    // get network configuration
+    lRetVal = sl_NetCfgGet(SL_IPV4_AP_P2P_GO_GET_INFO,&ucDHCP,&len,
+                            (unsigned char *)&ipV4);
+    if (lRetVal < 0)
+    {
+        UART_PRINT("Failed to get network configuration \n\r");
+        LOOP_FOREVER();
+    }
 
     while(1){
-        unsigned char len = sizeof(SlNetCfgIpV4Args_t);
-        SlNetCfgIpV4Args_t ipV4 = {0};
-
-        // get network configuration
-        lRetVal = sl_NetCfgGet(SL_IPV4_AP_P2P_GO_GET_INFO,&ucDHCP,&len,
-                                (unsigned char *)&ipV4);
-        if (lRetVal < 0)
-        {
-            UART_PRINT("Failed to get network configuration \n\r");
-            LOOP_FOREVER();
-        }
 
         //UART_PRINT("Connect a client to Device\n\r");
 
@@ -838,7 +839,7 @@ int connectionManager() {
     iTestBufLen  = BUF_SIZE;
 
     while(IS_IP_LEASED(g_ulStatus)){
-          //waiting for the client to connect
+        //waiting for the client to connect
         UART_PRINT("Client is connected to Device\n\r");
 
         ////////////////////////// Client connected to Device /////////////////////////////
@@ -865,6 +866,7 @@ int connectionManager() {
             {
                 // error
                 sl_Close(iSockID);
+                //perror("bind error");
                 ERR_PRINT(BIND_ERROR);
             }
             else {
@@ -922,6 +924,12 @@ int connectionManager() {
                         // waits for 1000 packets from the connected TCP client
                         UART_PRINT("Waiting for incoming message...\n\r");
                         while (1) {
+                            if(!IS_IP_LEASED(g_ulStatus)) {
+                                UART_PRINT("Connect a client to device...\n\r");
+                                sl_Close(iNewSockID);
+                                sl_Close(iSockID);
+                                return -1;
+                            }
                             iStatus = sl_Recv(iNewSockID, g_cBsdRecvBuf, iTestBufLen, 0);
                             if (iStatus == SL_EAGAIN) {
                                 MAP_UtilsDelay(10000);
