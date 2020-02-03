@@ -30,13 +30,27 @@ public class TcpClient {
     // used to read messages from the server
     private BufferedReader mBufferIn;
 
-
     public TcpClient(OnMessageReceived listener) {
         mMessageListener = listener;
     }
 
+    public void sendMessageLong(final long message) {
+        Runnable runnable = new Runnable() {
+            @Override
+            public void run() {
+                Log.d(TAG, "run: sendMessage running");
+                if (mBufferOut != null) {
+                    //Log.d(TAG, "Sending: " + message);
+                    mBufferOut.println(message);
+                    mBufferOut.flush();
+                }
+            }
+        };
+        Thread thread = new Thread(runnable);
+        thread.start();
+    }
 
-    public void sendMessage(final String message) {
+    public void sendMessageString(final String message) {
         Runnable runnable = new Runnable() {
             @Override
             public void run() {
