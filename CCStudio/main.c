@@ -1,53 +1,3 @@
-//*****************************************************************************
-//
-// Copyright (C) 2014 Texas Instruments Incorporated - http://www.ti.com/
-//
-//
-//  Redistribution and use in source and binary forms, with or without
-//  modification, are permitted provided that the following conditions
-//  are met:
-//
-//    Redistributions of source code must retain the above copyright
-//    notice, this list of conditions and the following disclaimer.
-//
-//    Redistributions in binary form must reproduce the above copyright
-//    notice, this list of conditions and the following disclaimer in the
-//    documentation and/or other materials provided with the
-//    distribution.
-//
-//    Neither the name of Texas Instruments Incorporated nor the names of
-//    its contributors may be used to endorse or promote products derived
-//    from this software without specific prior written permission.
-//
-//  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
-//  "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
-//  LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
-//  A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
-//  OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
-//  SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
-//  LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
-//  DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
-//  THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-//  (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-//  OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-//*****************************************************************************
-
-
-//*****************************************************************************
-//
-// Application Name     - Getting started with WLAN AP
-// Application Overview - This application aims to exhibit the CC3200 device as
-//                        AP. Developers/users can refer the function or re-use
-//                        them while writing new application.
-// Application Details  -
-// http://processors.wiki.ti.com/index.php/CC32xx_Getting_Started_with_WLAN_AP
-// or
-// docs\examples\CC32xx_Getting_Started_with_WLAN_AP.pdf
-//
-//*****************************************************************************
-
-
 //****************************************************************************
 //
 //! \addtogroup getting_started_ap
@@ -136,6 +86,8 @@ unsigned long  g_uiGatewayIP = 0;
 char g_cBsdSendBuf[BUF_SIZE];
 char g_cBsdRecvBuf[BUF_SIZE];
 
+OsiMsgQ_t msgQfb = NULL;
+
 #if defined(ccs) || defined(gcc)
 extern void (* const g_pfnVectors[])(void);
 #endif
@@ -163,16 +115,6 @@ int connectionManager();
 // FreeRTOS User Hook Functions enabled in FreeRTOSConfig.h
 //*****************************************************************************
 
-//*****************************************************************************
-//
-//! \brief Application defined hook (or callback) function - assert
-//!
-//! \param[in]  pcFile - Pointer to the File Name
-//! \param[in]  ulLine - Line Number
-//!
-//! \return none
-//!
-//*****************************************************************************
 void
 vAssertCalled( const char *pcFile, unsigned long ulLine )
 {
@@ -182,30 +124,12 @@ vAssertCalled( const char *pcFile, unsigned long ulLine )
     }
 }
 
-//*****************************************************************************
-//
-//! \brief Application defined idle task hook
-//!
-//! \param  none
-//!
-//! \return none
-//!
-//*****************************************************************************
 void
 vApplicationIdleHook( void)
 {
     //Handle Idle Hook for Profiling, Power Management etc
 }
 
-//*****************************************************************************
-//
-//! \brief Application defined malloc failed hook
-//!
-//! \param  none
-//!
-//! \return none
-//!
-//*****************************************************************************
 void vApplicationMallocFailedHook()
 {
     //Handle Memory Allocation Errors
@@ -214,15 +138,6 @@ void vApplicationMallocFailedHook()
     }
 }
 
-//*****************************************************************************
-//
-//! \brief Application defined stack overflow hook
-//!
-//! \param  none
-//!
-//! \return none
-//!
-//*****************************************************************************
 void vApplicationStackOverflowHook(OsiTaskHandle *pxTask,
                                    signed char *pcTaskName)
 {
@@ -233,22 +148,6 @@ void vApplicationStackOverflowHook(OsiTaskHandle *pxTask,
 }
 #endif //USE_FREERTOS
 
-
-//*****************************************************************************
-// SimpleLink Asynchronous Event Handlers -- Start
-//*****************************************************************************
-
-
-//*****************************************************************************
-//
-//! On Successful completion of Wlan Connect, This function triggers Connection
-//! status to be set.
-//!
-//! \param  pSlWlanEvent pointer indicating Event type
-//!
-//! \return None
-//!
-//*****************************************************************************
 void SimpleLinkWlanEventHandler(SlWlanEvent_t *pSlWlanEvent)
 {
     switch(pSlWlanEvent->Event)
@@ -257,15 +156,6 @@ void SimpleLinkWlanEventHandler(SlWlanEvent_t *pSlWlanEvent)
         {
             SET_STATUS_BIT(g_ulStatus, STATUS_BIT_CONNECTION);
 
-            //
-            // Information about the connected AP (like name, MAC etc) will be
-            // available in 'slWlanConnectAsyncResponse_t'-Applications
-            // can use it if required
-            //
-            //  slWlanConnectAsyncResponse_t *pEventData = NULL;
-            // pEventData = &pWlanEvent->EventData.STAandP2PModeWlanConnected;
-            //
-            //
         }
         break;
 
@@ -298,15 +188,6 @@ void SimpleLinkWlanEventHandler(SlWlanEvent_t *pSlWlanEvent)
             // when device is in AP mode and any client connects to device cc3xxx
             SET_STATUS_BIT(g_ulStatus, STATUS_BIT_CONNECTION);
 
-            //
-            // Information about the connected client (like SSID, MAC etc) will be
-            // available in 'slPeerInfoAsyncResponse_t' - Applications
-            // can use it if required
-            //
-            // slPeerInfoAsyncResponse_t *pEventData = NULL;
-            // pEventData = &pSlWlanEvent->EventData.APModeStaConnected;
-            //
-
         }
         break;
 
@@ -316,14 +197,6 @@ void SimpleLinkWlanEventHandler(SlWlanEvent_t *pSlWlanEvent)
             CLR_STATUS_BIT(g_ulStatus, STATUS_BIT_CONNECTION);
             CLR_STATUS_BIT(g_ulStatus, STATUS_BIT_IP_LEASED);
 
-            //
-            // Information about the connected client (like SSID, MAC etc) will
-            // be available in 'slPeerInfoAsyncResponse_t' - Applications
-            // can use it if required
-            //
-            // slPeerInfoAsyncResponse_t *pEventData = NULL;
-            // pEventData = &pSlWlanEvent->EventData.APModestaDisconnected;
-            //
         }
         break;
 
@@ -335,16 +208,6 @@ void SimpleLinkWlanEventHandler(SlWlanEvent_t *pSlWlanEvent)
     }
 }
 
-//*****************************************************************************
-//
-//! \brief This function handles network events such as IP acquisition, IP
-//!           leased, IP released etc.
-//!
-//! \param[in]  pNetAppEvent - Pointer to NetApp Event Info
-//!
-//! \return None
-//!
-//*****************************************************************************
 void SimpleLinkNetAppEventHandler(SlNetAppEvent_t *pNetAppEvent)
 {
     switch(pNetAppEvent->Event)
@@ -389,32 +252,12 @@ void SimpleLinkNetAppEventHandler(SlNetAppEvent_t *pNetAppEvent)
 }
 
 
-//*****************************************************************************
-//
-//! \brief This function handles HTTP server events
-//!
-//! \param[in]  pServerEvent - Contains the relevant event information
-//! \param[in]    pServerResponse - Should be filled by the user with the
-//!                                      relevant response information
-//!
-//! \return None
-//!
-//****************************************************************************
 void SimpleLinkHttpServerCallback(SlHttpServerEvent_t *pHttpEvent,
                                   SlHttpServerResponse_t *pHttpResponse)
 {
     // Unused in this application
 }
 
-//*****************************************************************************
-//
-//! \brief This function handles General Events
-//!
-//! \param[in]     pDevEvent - Pointer to General Event Info
-//!
-//! \return None
-//!
-//*****************************************************************************
 void SimpleLinkGeneralEventHandler(SlDeviceEvent_t *pDevEvent)
 {
     //
@@ -427,15 +270,6 @@ void SimpleLinkGeneralEventHandler(SlDeviceEvent_t *pDevEvent)
 }
 
 
-//*****************************************************************************
-//
-//! This function handles socket events indication
-//!
-//! \param[in]      pSock - Pointer to Socket Event Info
-//!
-//! \return None
-//!
-//*****************************************************************************
 void SimpleLinkSockEventHandler(SlSockEvent_t *pSock)
 {
     //
@@ -466,35 +300,12 @@ void SimpleLinkSockEventHandler(SlSockEvent_t *pSock)
 
 }
 
-//*****************************************************************************
-//
-//! \brief This function handles ping report events
-//!
-//! \param[in]     pPingReport - Ping report statistics
-//!
-//! \return None
-//
-//****************************************************************************
 void SimpleLinkPingReport(SlPingReport_t *pPingReport)
 {
     SET_STATUS_BIT(g_ulStatus, STATUS_BIT_PING_DONE);
     g_ulPingPacketsRecv = pPingReport->PacketsReceived;
 }
 
-//*****************************************************************************
-// SimpleLink Asynchronous Event Handlers -- End
-//*****************************************************************************
-
-
-//****************************************************************************
-//
-//!    \brief This function initializes the application variables
-//!
-//!    \param[in]  None
-//!
-//!    \return     None
-//
-//****************************************************************************
 static void InitializeAppVariables()
 {
     g_ulStatus = 0;
@@ -503,21 +314,6 @@ static void InitializeAppVariables()
     g_uiGatewayIP = 0;
 }
 
-//*****************************************************************************
-//! \brief This function puts the device in its default state. It:
-//!           - Set the mode to STATION
-//!           - Configures connection policy to Auto and AutoSmartConfig
-//!           - Deletes all the stored profiles
-//!           - Enables DHCP
-//!           - Disables Scan policy
-//!           - Sets Tx power to maximum
-//!           - Sets power policy to normal
-//!           - Unregister mDNS services
-//!           - Remove all filters
-//!
-//! \param   none
-//! \return  On success, zero is returned. On error, negative is returned
-//*****************************************************************************
 static long ConfigureSimpleLinkToDefaultState()
 {
     //UART_PRINT("Enter configslDefState\n\r");
@@ -654,22 +450,6 @@ static long ConfigureSimpleLinkToDefaultState()
 }
 
 
-
-//****************************************************************************
-//
-//! Confgiures the mode in which the device will work
-//!
-//! \param iMode is the current mode of the device
-//!
-//! This function
-//!    1. prompt user for desired configuration and accordingly configure the
-//!          networking mode(STA or AP).
-//!       2. also give the user the option to configure the ssid name in case of
-//!       AP mode.
-//!
-//! \return sl_start return value(int).
-//
-//****************************************************************************
 static int ConfigureMode(int iMode)
 {
     char    pcSsidName[] = "High-Rise";
@@ -711,19 +491,6 @@ static int ConfigureMode(int iMode)
 
 
 
-
-
-//****************************************************************************
-//
-//!    \brief start simplelink, wait for the sta to connect to the device and
-//!        run the ping test for that sta
-//!
-//!    \param  pvparameters is the pointer to the list of parameters that can be
-//!         passed to the task while creating it
-//!
-//!    \return None
-//
-//****************************************************************************
 void ServerTCP( void *pvParameters )
 {
     unsigned char   ucDHCP;
@@ -818,8 +585,6 @@ void ServerTCP( void *pvParameters )
 
     while(1){
 
-        //UART_PRINT("Connect a client to Device\n\r");
-
         connectionManager();
     }
 }
@@ -857,39 +622,32 @@ int connectionManager() {
             ASSERT_ON_ERROR(SOCKET_CREATE_ERROR);
         }
         else {
-            UART_PRINT("Socket created\n\r");
             iAddrSize = sizeof(SlSockAddrIn_t);
 
             // binding the TCP socket to the TCP server address
-            iStatus = sl_Bind(iSockID, (SlSockAddr_t *)&sLocalAddr, iAddrSize);
-            if( iStatus < 0 )
+            if(sl_Bind(iSockID, (SlSockAddr_t *)&sLocalAddr, iAddrSize))
             {
                 // error
                 sl_Close(iSockID);
-                //perror("bind error");
                 ERR_PRINT(BIND_ERROR);
             }
             else {
-                UART_PRINT("Binded\n\r");
                 // putting the socket for listening to the incoming TCP connection
-                iStatus = sl_Listen(iSockID, 0);
-                if( iStatus < 0 )
+                if(sl_Listen(iSockID, 0))
                 {
                     sl_Close(iSockID);
                     ERR_PRINT(LISTEN_ERROR);
                 }
                 else {
-                    UART_PRINT("Listening\n\r");
                     // setting socket option to make the socket as non blocking
-                    iStatus = sl_SetSockOpt(iSockID, SL_SOL_SOCKET, SL_SO_NONBLOCKING,
-                                            &lNonBlocking, sizeof(lNonBlocking));
-                    if( iStatus < 0 )
+                    if(sl_SetSockOpt(iSockID, SL_SOL_SOCKET, SL_SO_NONBLOCKING,
+                                     &lNonBlocking, sizeof(lNonBlocking)))
                     {
                         sl_Close(iSockID);
                         ERR_PRINT(SOCKET_OPT_ERROR);
                     }
                     else {
-                        UART_PRINT("Option set\n\rWaiting for client connection...\n\r");
+                        UART_PRINT("Waiting for TCP client connection...\n\r");
                         iNewSockID = SL_EAGAIN;
 
                         // waiting for an incoming TCP connection
@@ -935,11 +693,11 @@ int connectionManager() {
                                 MAP_UtilsDelay(10000);
                             }
                             else if (iStatus > 0) {
-                                UART_PRINT("[Message received] %s\n\r",g_cBsdRecvBuf);
+                                UART_PRINT("[Message received] %s\r",g_cBsdRecvBuf);
+                                //UART_PRINT("Message length = %d\n\r", strlen(g_cBsdRecvBuf));
                                 /*iStatus = sl_Send(iNewSockID, g_cBsdSendBuf, iTestBufLen, 0);*/
                             }
                             else {
-                                UART_PRINT("Entry ELSE\n\r");
                                 sl_Close(iNewSockID);
                                 sl_Close(iSockID);
                                 break;
@@ -954,35 +712,11 @@ int connectionManager() {
     return -1; // Wifi client disconnected
 }
 
-//****************************************************************************
-//
-//! \brief Opening a TCP server side socket and receiving data
-//!
-//! This function opens a TCP socket in Listen mode and waits for an incoming
-//!    TCP connection.
-//! If a socket connection is established then the function will try to read
-//!    1000 TCP packets from the connected client.
-//!
-//! \param[in] port number on which the server will be listening on
-//!
-//! \return     0 on success, -1 on error.
-//!
-//! \note   This function will wait for an incoming connection till
-//!                     one is established
-//
-//****************************************************************************
+void StatusDroneFeedBack( void *pvParameters ) {
+
+}
 
 
-
-//*****************************************************************************
-//
-//! Application startup display on UART
-//!
-//! \param  none
-//!
-//! \return none
-//!
-//*****************************************************************************
 static void
 DisplayBanner(char * AppName)
 {
@@ -993,15 +727,8 @@ DisplayBanner(char * AppName)
     Report("\n\n\n\r");
 }
 
-//*****************************************************************************
-//
-//! Board Initialization & Configuration
-//!
-//! \param  None
-//!
-//! \return None
-//
-//*****************************************************************************
+
+
 static void
 BoardInit(void)
 {
@@ -1035,32 +762,15 @@ void main()
     {
     long lRetVal = -1;
 
-    //
-    // Board Initialization
-    //
     BoardInit();
-
-    //
-   // Initialize the uDMA
-   //
-   //UDMAInit();
-
-    //
-    // Configure the pinmux settings for the peripherals exercised
-    //
     PinMuxConfig();
 
 #ifndef NOTERM
-    //
-    // Configuring UART
-    //
     InitTerm();
 #endif
 
     //UART_PRINT("Enter main\n\r");
-    //
-    // Display banner
-    //
+
     DisplayBanner(APP_NAME);
 
     //
@@ -1070,7 +780,14 @@ void main()
     taskParam *pvParameters;
     pvParameters = (taskParam *) mem_Malloc(sizeof(taskParam));
 
-    lRetVal = osi_SyncObjCreate(&pSyncObjStart); // definir structure et passer en parametre des taches //
+    lRetVal = osi_SyncObjCreate(&pSyncObjStart);
+    if(lRetVal < 0)
+    {
+        ERR_PRINT(lRetVal);
+        LOOP_FOREVER();
+    }
+
+    //lRetVal = osi_MsgQCreate(&msgQfb,"FeedBack",);
     if(lRetVal < 0)
     {
         ERR_PRINT(lRetVal);
@@ -1082,8 +799,7 @@ void main()
 
 
     lRetVal = VStartSimpleLinkSpawnTask(SPAWN_TASK_PRIORITY);
-    if(lRetVal < 0)
-    {
+    if(lRetVal < 0){
         ERR_PRINT(lRetVal);
         LOOP_FOREVER();
     }
@@ -1092,27 +808,25 @@ void main()
     // Start the WlanAPMode task
     //
 
-    lRetVal = osi_TaskCreate( ServerTCP, \
-                            (const signed char*)"wireless LAN in AP mode", \
-                            OSI_STACK_SIZE, (void*) pvParameters, 1, NULL ); // (void*) pvParameters
-    if(lRetVal < 0)
-    {
+    lRetVal = osi_TaskCreate(ServerTCP, \
+                      (const signed char*)"wireless LAN in AP mode", \
+                      OSI_STACK_SIZE, (void*) pvParameters, 1, NULL );
+    if(lRetVal < 0){
         ERR_PRINT(lRetVal);
         LOOP_FOREVER();
     }
 
-    /*lRetVal = osi_TaskCreate( StatusDroneFeedBack, \
-                            (const signed char*)"Feedback from drone", \
-                            OSI_STACK_SIZE, (void*) pvParameters, 1, NULL );
-    if(lRetVal < 0)
-    {
+    /*osi_TaskCreate(StatusDroneFeedBack, \
+                      (const signed char*)"Feedback from drone", \
+                      OSI_STACK_SIZE, (void*) pvParameters, 1, NULL );
+    if(lRetVal < 0){
         ERR_PRINT(lRetVal);
         LOOP_FOREVER();
-    }
+    }*/
     //
     // Start the task scheduler
     //
-    UART_PRINT("Start scheduler\n\r");*/
+    UART_PRINT("Start scheduler\n\r");
     osi_start();
     //LOOP_FOREVER();
 }
