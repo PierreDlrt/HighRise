@@ -109,7 +109,7 @@ public class DroneActivity extends AppCompatActivity {
                 mAxes[axesMapping.ordinal()] = getCenteredAxis(ev, device, axesMapping.getMotionEvent());
             }
             updateAxes();
-            textView2.setText(Long.toBinaryString(keyMap));
+            new SendMessageTask().executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, keyMap);
             return true;
         }
         return super.dispatchGenericMotionEvent(ev);
@@ -149,8 +149,8 @@ public class DroneActivity extends AppCompatActivity {
         keyMapAxes |= (char) mAxes[mAxes.length-1]+1;
         textView1.setText("Motion:\n"+Long.toBinaryString(keyMapAxes));
         keyMapAxes <<= 12;
-        keyMap |= keyMapAxes;
-        //textView2.setText("KeyMap:\n"+Long.toBinaryString(keyMap));
+        keyMap = (keyMap & 4095) | keyMapAxes; // 0x0000000000000FFF : erase axes
+        textView2.setText("KeyMap:\n"+Long.toBinaryString(keyMap));
     }
 
     public enum AxesMapping {
@@ -186,7 +186,6 @@ public class DroneActivity extends AppCompatActivity {
             switch (event.getAction()) {
                 case KeyEvent.ACTION_DOWN:
                     keyMap |= updateButton(event.getKeyCode());
-
                     //Log.d(TAG, "dispatchKeyEvent: "+getNameFromCode(event.getKeyCode())+" pressed");
                     //textView.setText(getNameFromCode(event.getKeyCode()));
                     break;
@@ -196,7 +195,7 @@ public class DroneActivity extends AppCompatActivity {
                     break;
             }
             textView2.setText("Button:\n"+Long.toBinaryString(keyMap));
-            //new SendMessageTask().executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, keyMap);
+            new SendMessageTask().executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, keyMap);
         }
         return super.dispatchKeyEvent(event);
     }
