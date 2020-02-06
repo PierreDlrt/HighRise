@@ -109,7 +109,9 @@ public class DroneActivity extends AppCompatActivity {
                 mAxes[axesMapping.ordinal()] = getCenteredAxis(ev, device, axesMapping.getMotionEvent());
             }
             updateAxes();
-            new SendMessageTask().executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, keyMap);
+            if (wifiManager.getConnectionInfo()!=null && mTcpClient != null) {
+                //new SendMessageTask().executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, keyMap);
+            }
             return true;
         }
         return super.dispatchGenericMotionEvent(ev);
@@ -195,7 +197,9 @@ public class DroneActivity extends AppCompatActivity {
                     break;
             }
             textView2.setText("Button:\n"+Long.toBinaryString(keyMap));
-            new SendMessageTask().executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, keyMap);
+            if (wifiManager.getConnectionInfo()!=null && mTcpClient != null) {
+                //new SendMessageTask().executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, keyMap);
+            }
         }
         return super.dispatchKeyEvent(event);
     }
