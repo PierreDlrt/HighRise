@@ -6,6 +6,7 @@
 //****************************************************************************
 
 #include <stdlib.h>
+#include <stdio.h>
 #include <string.h>
 
 // Simplelink includes
@@ -83,8 +84,9 @@ unsigned char  g_ulStatus = 0;
 unsigned long  g_ulStaIp = 0;
 unsigned long  g_ulPingPacketsRecv = 0;
 unsigned long  g_uiGatewayIP = 0;
-char g_cBsdSendBuf[BUF_SIZE];
-char g_cBsdRecvBuf[BUF_SIZE];
+unsigned char g_cBsdSendBuf[BUF_SIZE];
+unsigned long g_cBsdRecvBuf[BUF_SIZE]= {0};
+
 
 OsiMsgQ_t msgQfb = NULL;
 
@@ -600,12 +602,14 @@ int connectionManager() {
     long            lNonBlocking = 1;
     int             iNewSockID;
     int             iTestBufLen;
+    unsigned long   num;
 
     iTestBufLen  = BUF_SIZE;
 
     while(IS_IP_LEASED(g_ulStatus)){
         //waiting for the client to connect
         UART_PRINT("Client is connected to Device\n\r");
+        UART_PRINT("g_cBsdRecvBuf = %s\n\r", g_cBsdRecvBuf);
 
         ////////////////////////// Client connected to Device /////////////////////////////
 
@@ -694,7 +698,7 @@ int connectionManager() {
                             }
                             else if (iStatus > 0) {
                                 UART_PRINT("[Message received] %s\r",g_cBsdRecvBuf);
-                                //UART_PRINT("Message length = %d\n\r", strlen(g_cBsdRecvBuf));
+                                //num = (num < 0) ? 1 + (~(unsigned long)(-num)) : num;
                                 /*iStatus = sl_Send(iNewSockID, g_cBsdSendBuf, iTestBufLen, 0);*/
                             }
                             else {
@@ -712,10 +716,45 @@ int connectionManager() {
     return -1; // Wifi client disconnected
 }
 
-void StatusDroneFeedBack( void *pvParameters ) {
+/*void StatusDroneFeedBack( void *pvParameters ) {
 
+}*/
+
+
+void CommandParser( void *pvParameters ) {
+
+    unsigned long keyMap = 0x8080808000005000, newButton;
+
+    while(1){
+        newButton = keyMap ^ g_cBsdRecvBuf[0];
+        keyMap = g_cBsdRecvBuf[0];
+        if(newButton & (0xFF << 56)){
+            //left joystick left/right
+        }
+        if(newButton & (0xFF << 48)){
+            //left joystick up/down
+        }
+        if(newButton & (0xFF << 40)){
+            //right joystick left/right
+        }
+        if(newButton & (0xFF << 32)){
+            //right joystick up/down
+        }
+        if(newButton & (0xFF << 24)){
+            // L2
+        }
+        if(newButton & (0xFF << 16)){
+            // R2
+        }
+        if(newButton & (0x3 << 14)){
+            // left/right arrows
+        }
+        if(newButton & (0x3 << 12)){
+            // up/down arrows
+        }
+        // vTaskDelayUntil(1 tick)
+    }
 }
-
 
 static void
 DisplayBanner(char * AppName)
@@ -778,6 +817,7 @@ void main()
     //
     OsiSyncObj_t pSyncObjStart;
     taskParam *pvParameters;
+    OsiTaskHandle pServerHandle, pParserHandle;
     pvParameters = (taskParam *) mem_Malloc(sizeof(taskParam));
 
     lRetVal = osi_SyncObjCreate(&pSyncObjStart);
@@ -810,15 +850,15 @@ void main()
 
     lRetVal = osi_TaskCreate(ServerTCP, \
                       (const signed char*)"wireless LAN in AP mode", \
-                      OSI_STACK_SIZE, (void*) pvParameters, 1, NULL );
+                      OSI_STACK_SIZE, (void*) pvParameters, tskIDLE_PRIORITY+1, &pServerHandle );
     if(lRetVal < 0){
         ERR_PRINT(lRetVal);
         LOOP_FOREVER();
     }
 
-    /*osi_TaskCreate(StatusDroneFeedBack, \
-                      (const signed char*)"Feedback from drone", \
-                      OSI_STACK_SIZE, (void*) pvParameters, 1, NULL );
+    /*lRetVal = osi_TaskCreate(CommandParser, \
+                      (const signed char*)"Extract command from keymap", \
+                      OSI_STACK_SIZE, (void*) pvParameters, tskIDLE_PRIORITY+2, &pParserHandle );
     if(lRetVal < 0){
         ERR_PRINT(lRetVal);
         LOOP_FOREVER();
