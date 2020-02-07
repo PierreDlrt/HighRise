@@ -29,24 +29,28 @@
 // common interface includes
 #include "common.h"
 #include "udma_if.h"
+#include "hw_memmap.h"
+#include "rom_map.h"
 #ifndef NOTERM
 #include "uart_if.h"
 #endif
+#include "uart.h"
 #include "pinmux.h"
 
 #define APP_NAME                "WLAN AP"
 #define APPLICATION_VERSION     "1.1.1"
 #define OSI_STACK_SIZE          2048
+#define UART_BAUD_RATE_FCU      100000
 
 
 //
 // Values for below macros shall be modified for setting the 'Ping' properties
 //
-#define PING_INTERVAL       1000    /* In msecs */
-#define PING_TIMEOUT        3000    /* In msecs */
-#define PING_PKT_SIZE       20      /* In bytes */
-#define NO_OF_ATTEMPTS      3
-#define PING_FLAG           0
+
+#define CHANNEL_RANGE_MIN       192
+#define CHANNEL_RANGE_MAX       1792
+#define CHANNEL_RANGE_CENTER    (CHANNEL_RANGE_MAX-CHANNEL_RANGE_MIN)/2
+#define NUM_CHANNEL             16
 
 #define PORT_NUM            5001
 #define BUF_SIZE            1000
@@ -100,6 +104,9 @@ extern uVectorEntry __vector_table;
 //                 GLOBAL VARIABLES -- End
 //*****************************************************************************
 
+const uint32_t _sbusBaud = 100000;
+const uint8_t _sbusHeader = 0x0F;
+const uint8_t _sbusFooter = 0x00;
 
 
 //****************************************************************************
@@ -499,7 +506,7 @@ void ServerTCP( void *pvParameters )
     long            lRetVal = -1;
     int             iCounter;
     //long            lLoopCount = 0;
-    size_t          lenfdp;
+    //size_t          lenfdp;
 
     taskParam *pxParameters;
     pxParameters = (taskParam*) pvParameters;
@@ -513,10 +520,6 @@ void ServerTCP( void *pvParameters )
         g_cBsdSendBuf[iCounter] = (char)(iCounter+65);
         //UART_PRINT("icounter=%d", iCounter);
     }
-
-    //lenfdp = strlen(g_cBsdSendBuf);
-    //UART_PRINT("len start = %d\n\r", lenfdp);
-
 
     //
     // Following function configure the device to default state by cleaning
@@ -602,7 +605,7 @@ int connectionManager() {
     long            lNonBlocking = 1;
     int             iNewSockID;
     int             iTestBufLen;
-    unsigned long   num;
+    //unsigned long   num;
 
     iTestBufLen  = BUF_SIZE;
 
@@ -694,7 +697,7 @@ int connectionManager() {
                             }
                             iStatus = sl_Recv(iNewSockID, g_cBsdRecvBuf, iTestBufLen, 0);
                             if (iStatus == SL_EAGAIN) {
-                                MAP_UtilsDelay(10000);
+                                //MAP_UtilsDelay(10000);
                             }
                             else if (iStatus > 0) {
                                 UART_PRINT("[Message received] %s\r",g_cBsdRecvBuf);
@@ -720,37 +723,78 @@ int connectionManager() {
 
 }*/
 
+uint16_t mapValue(uint8_t val, int out_min, int out_max) {
+    return val * (out_max - out_min)/255 + out_min;
+}
 
-void CommandParser( void *pvParameters ) {
+void CommandManager( void *pvParameters ) {
 
-    unsigned long keyMap = 0x8080808000005000, newButton;
+    uint64_t keyMap = 0x8080808000005000, newAction;
+    static uint8_t packet[25];
+    uint16_t channels[NUM_CHANNEL]={0};
+    int i;
+
+    MAP_UARTConfigSetExpClk(UARTA1_BASE,MAP_PRCMPeripheralClockGet(PRCM_UARTA1), \
+                    UART_BAUD_RATE_FCU, (UART_CONFIG_WLEN_8 | UART_CONFIG_STOP_TWO | \
+                    UART_CONFIG_PAR_EVEN));
 
     while(1){
-        newButton = keyMap ^ g_cBsdRecvBuf[0];
+        newAction = keyMap ^ g_cBsdRecvBuf[0];
         keyMap = g_cBsdRecvBuf[0];
-        if(newButton & (0xFF << 56)){
-            //left joystick left/right
+        if(newAction & ((uint64_t) 0xFF << 56)){ //left joystick left/right
+            channels[0] = mapValue((uint8_t) (keyMap >> 56), CHANNEL_RANGE_MIN, CHANNEL_RANGE_MAX);
         }
-        if(newButton & (0xFF << 48)){
-            //left joystick up/down
+        if(newAction & ((uint64_t) 0xFF << 48)){ //left joystick up/down
+            channels[1] = mapValue((uint8_t) (keyMap >> 48), CHANNEL_RANGE_MIN, CHANNEL_RANGE_MAX);
         }
-        if(newButton & (0xFF << 40)){
-            //right joystick left/right
+        if(newAction & ((uint64_t) 0xFF << 40)){ //right joystick left/right
+            channels[2] = mapValue((uint8_t) (keyMap >> 40), CHANNEL_RANGE_MIN, CHANNEL_RANGE_MAX);
         }
-        if(newButton & (0xFF << 32)){
-            //right joystick up/down
+        if(newAction & ((uint64_t) 0xFF << 24)){  // L2
+            if(!((uint8_t) (keyMap >> 16)) | ((uint8_t) (keyMap >> 24))) { // if both button are not clicked at the same time
+                channels[3] = mapValue((uint8_t) keyMap >> 24, CHANNEL_RANGE_CENTER, CHANNEL_RANGE_MIN);
+            }
         }
-        if(newButton & (0xFF << 24)){
-            // L2
+        if(newAction & ((uint64_t) 0xFF << 16)){ // R2
+            if(!((uint8_t) (keyMap >> 16)) | ((uint8_t) (keyMap >> 24))) { // if both button are not clicked at the same time
+                channels[3] = mapValue((uint8_t) keyMap >> 16, CHANNEL_RANGE_CENTER, CHANNEL_RANGE_MAX);
+            }
         }
-        if(newButton & (0xFF << 16)){
-            // R2
-        }
-        if(newButton & (0x3 << 14)){
+        if(newAction & ((uint64_t) 0x3 << 14)){
             // left/right arrows
         }
-        if(newButton & (0x3 << 12)){
+        if(newAction & ((uint64_t) 0x3 << 12)){
             // up/down arrows
+        }
+
+        packet[0] = _sbusHeader;
+        packet[1] = (uint8_t) ((channels[0] & 0x07FF));
+        packet[2] = (uint8_t) ((channels[0] & 0x07FF)>>8 | (channels[1] & 0x07FF)<<3);
+        packet[3] = (uint8_t) ((channels[1] & 0x07FF)>>5 | (channels[2] & 0x07FF)<<6);
+        packet[4] = (uint8_t) ((channels[2] & 0x07FF)>>2);
+        packet[5] = (uint8_t) ((channels[2] & 0x07FF)>>10 | (channels[3] & 0x07FF)<<1);
+        packet[6] = (uint8_t) ((channels[3] & 0x07FF)>>7 | (channels[4] & 0x07FF)<<4);
+        packet[7] = (uint8_t) ((channels[4] & 0x07FF)>>4 | (channels[5] & 0x07FF)<<7);
+        packet[8] = (uint8_t) ((channels[5] & 0x07FF)>>1);
+        packet[9] = (uint8_t) ((channels[5] & 0x07FF)>>9 | (channels[6] & 0x07FF)<<2);
+        packet[10] = (uint8_t) ((channels[6] & 0x07FF)>>6 | (channels[7] & 0x07FF)<<5);
+        packet[11] = (uint8_t) ((channels[7] & 0x07FF)>>3);
+        packet[12] = (uint8_t) ((channels[8] & 0x07FF));
+        packet[13] = (uint8_t) ((channels[8] & 0x07FF)>>8 | (channels[9] & 0x07FF)<<3);
+        packet[14] = (uint8_t) ((channels[9] & 0x07FF)>>5 | (channels[10] & 0x07FF)<<6);
+        packet[15] = (uint8_t) ((channels[10] & 0x07FF)>>2);
+        packet[16] = (uint8_t) ((channels[10] & 0x07FF)>>10 | (channels[11] & 0x07FF)<<1);
+        packet[17] = (uint8_t) ((channels[11] & 0x07FF)>>7 | (channels[12] & 0x07FF)<<4);
+        packet[18] = (uint8_t) ((channels[12] & 0x07FF)>>4 | (channels[13] & 0x07FF)<<7);
+        packet[19] = (uint8_t) ((channels[13] & 0x07FF)>>1);
+        packet[20] = (uint8_t) ((channels[13] & 0x07FF)>>9 | (channels[14] & 0x07FF)<<2);
+        packet[21] = (uint8_t) ((channels[14] & 0x07FF)>>6 | (channels[15] & 0x07FF)<<5);
+        packet[22] = (uint8_t) ((channels[15] & 0x07FF)>>3);
+        packet[23] = 0x00;
+        packet[24] = _sbusFooter;
+
+        for (i = 0; i<25; i++) {
+            MAP_UARTCharPut(UARTA1_BASE, packet[i]);
         }
         // vTaskDelayUntil(1 tick)
     }
@@ -817,7 +861,7 @@ void main()
     //
     OsiSyncObj_t pSyncObjStart;
     taskParam *pvParameters;
-    OsiTaskHandle pServerHandle, pParserHandle;
+    OsiTaskHandle pServerHandle, pCommandTaskHandle;
     pvParameters = (taskParam *) mem_Malloc(sizeof(taskParam));
 
     lRetVal = osi_SyncObjCreate(&pSyncObjStart);
@@ -856,9 +900,9 @@ void main()
         LOOP_FOREVER();
     }
 
-    /*lRetVal = osi_TaskCreate(CommandParser, \
+    /*lRetVal = osi_TaskCreate(CommandManager, \
                       (const signed char*)"Extract command from keymap", \
-                      OSI_STACK_SIZE, (void*) pvParameters, tskIDLE_PRIORITY+2, &pParserHandle );
+                      OSI_STACK_SIZE, (void*) pvParameters, tskIDLE_PRIORITY+2, &pCommandTaskHandle );
     if(lRetVal < 0){
         ERR_PRINT(lRetVal);
         LOOP_FOREVER();
