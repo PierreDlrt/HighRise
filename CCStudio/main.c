@@ -51,6 +51,7 @@
 #define CHANNEL_RANGE_MAX       1792
 #define CHANNEL_RANGE_CENTER    (CHANNEL_RANGE_MAX-CHANNEL_RANGE_MIN)/2
 #define NUM_CHANNEL             16
+#define NUM_PACKET              25
 
 #define PORT_NUM            5001
 #define BUF_SIZE            1000
@@ -89,7 +90,7 @@ unsigned long  g_ulStaIp = 0;
 unsigned long  g_ulPingPacketsRecv = 0;
 unsigned long  g_uiGatewayIP = 0;
 unsigned char g_cBsdSendBuf[BUF_SIZE];
-unsigned long g_cBsdRecvBuf[BUF_SIZE]= {0};
+char g_cBsdRecvBuf[BUF_SIZE]= {0};
 
 
 OsiMsgQ_t msgQfb = NULL;
@@ -589,7 +590,7 @@ void ServerTCP( void *pvParameters )
     }
 
     while(1){
-
+        //UART_PRINT("Task 1 start\n\r");
         connectionManager();
     }
 }
@@ -689,6 +690,7 @@ int connectionManager() {
                         // waits for 1000 packets from the connected TCP client
                         UART_PRINT("Waiting for incoming message...\n\r");
                         while (1) {
+                            //UART_PRINT("Task 1 execute\n\r");
                             if(!IS_IP_LEASED(g_ulStatus)) {
                                 UART_PRINT("Connect a client to device...\n\r");
                                 sl_Close(iNewSockID);
@@ -700,7 +702,16 @@ int connectionManager() {
                                 //MAP_UtilsDelay(10000);
                             }
                             else if (iStatus > 0) {
-                                UART_PRINT("[Message received] %s\r",g_cBsdRecvBuf);
+                                UART_PRINT("[Message received] %02X, %02X, %02X, %02X, %02X, %02X, %02X, %02X\n\r",\
+                                           g_cBsdRecvBuf[0],\
+                                           g_cBsdRecvBuf[1],\
+                                           g_cBsdRecvBuf[2],\
+                                           g_cBsdRecvBuf[3],\
+                                           g_cBsdRecvBuf[4],\
+                                           g_cBsdRecvBuf[5],\
+                                           g_cBsdRecvBuf[6],\
+                                           g_cBsdRecvBuf[7]);
+                                //UART_PRINT("[Message received] %s\r",g_cBsdRecvBuf);
                                 //num = (num < 0) ? 1 + (~(unsigned long)(-num)) : num;
                                 /*iStatus = sl_Send(iNewSockID, g_cBsdSendBuf, iTestBufLen, 0);*/
                             }
@@ -727,76 +738,91 @@ uint16_t mapValue(uint8_t val, int out_min, int out_max) {
     return val * (out_max - out_min)/255 + out_min;
 }
 
-void CommandManager( void *pvParameters ) {
+void CommandManager(void *pvParameters) {
 
     uint64_t keyMap = 0x8080808000005000, newAction;
     static uint8_t packet[25];
     uint16_t channels[NUM_CHANNEL]={0};
-    int i;
+    int i, upd=0;
+    TickType_t xLastWakeTime;
+    const TickType_t xFrequency = 100;
 
-    MAP_UARTConfigSetExpClk(UARTA1_BASE,MAP_PRCMPeripheralClockGet(PRCM_UARTA1), \
+
+    /*MAP_UARTConfigSetExpClk(UARTA1_BASE,MAP_PRCMPeripheralClockGet(PRCM_UARTA1), \
                     UART_BAUD_RATE_FCU, (UART_CONFIG_WLEN_8 | UART_CONFIG_STOP_TWO | \
-                    UART_CONFIG_PAR_EVEN));
+                    UART_CONFIG_PAR_EVEN));*/
 
     while(1){
-        newAction = keyMap ^ g_cBsdRecvBuf[0];
-        keyMap = g_cBsdRecvBuf[0];
-        if(newAction & ((uint64_t) 0xFF << 56)){ //left joystick left/right
-            channels[0] = mapValue((uint8_t) (keyMap >> 56), CHANNEL_RANGE_MIN, CHANNEL_RANGE_MAX);
-        }
-        if(newAction & ((uint64_t) 0xFF << 48)){ //left joystick up/down
-            channels[1] = mapValue((uint8_t) (keyMap >> 48), CHANNEL_RANGE_MIN, CHANNEL_RANGE_MAX);
-        }
-        if(newAction & ((uint64_t) 0xFF << 40)){ //right joystick left/right
-            channels[2] = mapValue((uint8_t) (keyMap >> 40), CHANNEL_RANGE_MIN, CHANNEL_RANGE_MAX);
-        }
-        if(newAction & ((uint64_t) 0xFF << 24)){  // L2
-            if(!((uint8_t) (keyMap >> 16)) | ((uint8_t) (keyMap >> 24))) { // if both button are not clicked at the same time
-                channels[3] = mapValue((uint8_t) keyMap >> 24, CHANNEL_RANGE_CENTER, CHANNEL_RANGE_MIN);
+        xLastWakeTime = xTaskGetTickCount();
+        if(IS_IP_LEASED(g_ulStatus)){
+
+            newAction = keyMap ^ g_cBsdRecvBuf[0];
+            keyMap = g_cBsdRecvBuf[0];
+            if(newAction & ((uint64_t) 0xFF << 56)){ //left joystick left/right
+                channels[0] = mapValue((uint8_t) (keyMap >> 56), CHANNEL_RANGE_MIN, CHANNEL_RANGE_MAX);
             }
-        }
-        if(newAction & ((uint64_t) 0xFF << 16)){ // R2
-            if(!((uint8_t) (keyMap >> 16)) | ((uint8_t) (keyMap >> 24))) { // if both button are not clicked at the same time
-                channels[3] = mapValue((uint8_t) keyMap >> 16, CHANNEL_RANGE_CENTER, CHANNEL_RANGE_MAX);
+            if(newAction & ((uint64_t) 0xFF << 48)){ //left joystick up/down
+                channels[1] = mapValue((uint8_t) (keyMap >> 48), CHANNEL_RANGE_MIN, CHANNEL_RANGE_MAX);
             }
-        }
-        if(newAction & ((uint64_t) 0x3 << 14)){
-            // left/right arrows
-        }
-        if(newAction & ((uint64_t) 0x3 << 12)){
-            // up/down arrows
+            if(newAction & ((uint64_t) 0xFF << 40)){ //right joystick left/right
+                channels[2] = mapValue((uint8_t) (keyMap >> 40), CHANNEL_RANGE_MIN, CHANNEL_RANGE_MAX);
+            }
+            if(newAction & ((uint64_t) 0xFF << 24)){  // L2
+                if(!((uint8_t) (keyMap >> 16)) | ((uint8_t) (keyMap >> 24))) { // if both button are not clicked at the same time
+                    channels[3] = mapValue((uint8_t) keyMap >> 24, CHANNEL_RANGE_CENTER, CHANNEL_RANGE_MIN);
+                }
+            }
+            if(newAction & ((uint64_t) 0xFF << 16)){ // R2
+                if(!((uint8_t) (keyMap >> 16)) | ((uint8_t) (keyMap >> 24))) { // if both button are not clicked at the same time
+                    channels[3] = mapValue((uint8_t) keyMap >> 16, CHANNEL_RANGE_CENTER, CHANNEL_RANGE_MAX);
+                }
+            }
+            if(newAction & ((uint64_t) 0x3 << 14)){
+                // left/right arrows
+            }
+            if(newAction & ((uint64_t) 0x3 << 12)){
+                // up/down arrows
+            }
+
+            packet[0] = _sbusHeader;
+            packet[1] = (uint8_t) ((channels[0] & 0x07FF));
+            packet[2] = (uint8_t) ((channels[0] & 0x07FF)>>8 | (channels[1] & 0x07FF)<<3);
+            packet[3] = (uint8_t) ((channels[1] & 0x07FF)>>5 | (channels[2] & 0x07FF)<<6);
+            packet[4] = (uint8_t) ((channels[2] & 0x07FF)>>2);
+            packet[5] = (uint8_t) ((channels[2] & 0x07FF)>>10 | (channels[3] & 0x07FF)<<1);
+            packet[6] = (uint8_t) ((channels[3] & 0x07FF)>>7 | (channels[4] & 0x07FF)<<4);
+            packet[7] = (uint8_t) ((channels[4] & 0x07FF)>>4 | (channels[5] & 0x07FF)<<7);
+            packet[8] = (uint8_t) ((channels[5] & 0x07FF)>>1);
+            packet[9] = (uint8_t) ((channels[5] & 0x07FF)>>9 | (channels[6] & 0x07FF)<<2);
+            packet[10] = (uint8_t) ((channels[6] & 0x07FF)>>6 | (channels[7] & 0x07FF)<<5);
+            packet[11] = (uint8_t) ((channels[7] & 0x07FF)>>3);
+            packet[12] = (uint8_t) ((channels[8] & 0x07FF));
+            packet[13] = (uint8_t) ((channels[8] & 0x07FF)>>8 | (channels[9] & 0x07FF)<<3);
+            packet[14] = (uint8_t) ((channels[9] & 0x07FF)>>5 | (channels[10] & 0x07FF)<<6);
+            packet[15] = (uint8_t) ((channels[10] & 0x07FF)>>2);
+            packet[16] = (uint8_t) ((channels[10] & 0x07FF)>>10 | (channels[11] & 0x07FF)<<1);
+            packet[17] = (uint8_t) ((channels[11] & 0x07FF)>>7 | (channels[12] & 0x07FF)<<4);
+            packet[18] = (uint8_t) ((channels[12] & 0x07FF)>>4 | (channels[13] & 0x07FF)<<7);
+            packet[19] = (uint8_t) ((channels[13] & 0x07FF)>>1);
+            packet[20] = (uint8_t) ((channels[13] & 0x07FF)>>9 | (channels[14] & 0x07FF)<<2);
+            packet[21] = (uint8_t) ((channels[14] & 0x07FF)>>6 | (channels[15] & 0x07FF)<<5);
+            packet[22] = (uint8_t) ((channels[15] & 0x07FF)>>3);
+            packet[23] = 0x00;
+            packet[24] = _sbusFooter;
+
+            //ClearTerm();
+            UART_PRINT("--------------------\n\r");
+            UART_PRINT("\tUPDATE %d\n\r", newAction ? upd++ : upd);
+            UART_PRINT("--------------------\n\r");
+            for (i = 0; i<4; i++) {
+                //MAP_UARTCharPut(UARTA1_BASE, packet[i]);
+                //UART_PRINT("packet[%d]: %02X\n\r", i, packet[i]);
+                UART_PRINT("channels[%d]: %04X\n\r", i, channels[i]);
+            }
+            UART_PRINT("\33[%dA", 4+3); // Move terminal cursor up %d lines
         }
 
-        packet[0] = _sbusHeader;
-        packet[1] = (uint8_t) ((channels[0] & 0x07FF));
-        packet[2] = (uint8_t) ((channels[0] & 0x07FF)>>8 | (channels[1] & 0x07FF)<<3);
-        packet[3] = (uint8_t) ((channels[1] & 0x07FF)>>5 | (channels[2] & 0x07FF)<<6);
-        packet[4] = (uint8_t) ((channels[2] & 0x07FF)>>2);
-        packet[5] = (uint8_t) ((channels[2] & 0x07FF)>>10 | (channels[3] & 0x07FF)<<1);
-        packet[6] = (uint8_t) ((channels[3] & 0x07FF)>>7 | (channels[4] & 0x07FF)<<4);
-        packet[7] = (uint8_t) ((channels[4] & 0x07FF)>>4 | (channels[5] & 0x07FF)<<7);
-        packet[8] = (uint8_t) ((channels[5] & 0x07FF)>>1);
-        packet[9] = (uint8_t) ((channels[5] & 0x07FF)>>9 | (channels[6] & 0x07FF)<<2);
-        packet[10] = (uint8_t) ((channels[6] & 0x07FF)>>6 | (channels[7] & 0x07FF)<<5);
-        packet[11] = (uint8_t) ((channels[7] & 0x07FF)>>3);
-        packet[12] = (uint8_t) ((channels[8] & 0x07FF));
-        packet[13] = (uint8_t) ((channels[8] & 0x07FF)>>8 | (channels[9] & 0x07FF)<<3);
-        packet[14] = (uint8_t) ((channels[9] & 0x07FF)>>5 | (channels[10] & 0x07FF)<<6);
-        packet[15] = (uint8_t) ((channels[10] & 0x07FF)>>2);
-        packet[16] = (uint8_t) ((channels[10] & 0x07FF)>>10 | (channels[11] & 0x07FF)<<1);
-        packet[17] = (uint8_t) ((channels[11] & 0x07FF)>>7 | (channels[12] & 0x07FF)<<4);
-        packet[18] = (uint8_t) ((channels[12] & 0x07FF)>>4 | (channels[13] & 0x07FF)<<7);
-        packet[19] = (uint8_t) ((channels[13] & 0x07FF)>>1);
-        packet[20] = (uint8_t) ((channels[13] & 0x07FF)>>9 | (channels[14] & 0x07FF)<<2);
-        packet[21] = (uint8_t) ((channels[14] & 0x07FF)>>6 | (channels[15] & 0x07FF)<<5);
-        packet[22] = (uint8_t) ((channels[15] & 0x07FF)>>3);
-        packet[23] = 0x00;
-        packet[24] = _sbusFooter;
-
-        for (i = 0; i<25; i++) {
-            MAP_UARTCharPut(UARTA1_BASE, packet[i]);
-        }
-        // vTaskDelayUntil(1 tick)
+        vTaskDelayUntil( &xLastWakeTime, xFrequency );
     }
 }
 
@@ -854,6 +880,7 @@ void main()
 
     //UART_PRINT("Enter main\n\r");
 
+    ClearTerm();
     DisplayBanner(APP_NAME);
 
     //
