@@ -21,6 +21,9 @@ import android.widget.EditText;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import java.util.Arrays;
+import java.util.List;
+
 public class DroneActivity extends AppCompatActivity {
 
     public static final String TAG = DroneActivity.class.getSimpleName();
@@ -31,7 +34,7 @@ public class DroneActivity extends AppCompatActivity {
 
     int cpt=0;
     public static String IP_addr;
-    private byte buf[] = new byte[] {0,0,0,0,-1,-1,0,0,};
+    char[] sendBuf = new char[] {};
     private long keyMap = 0;
     private float[] mAxes = new float[AxesMapping.values().length];
 
@@ -72,7 +75,10 @@ public class DroneActivity extends AppCompatActivity {
                     //String message = editText.getText().toString();
                     if (mTcpClient != null) {
                         Log.d(TAG, "onClick: SendMessageTask created");
-                        new SendMessageTask().executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, keyMap);
+                        //new SendMessageTask().executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, keyMap);
+                        new SendMessageTask().executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, sendBuf);
+                        //sendBuf[0]++;
+                        Log.d(TAG, "onClick: keymap="+Long.toHexString(keyMap));
                     }
                     //editText.setText("");
                 } else {
@@ -108,7 +114,8 @@ public class DroneActivity extends AppCompatActivity {
             for (AxesMapping axesMapping : AxesMapping.values()) {
                 mAxes[axesMapping.ordinal()] = getCenteredAxis(ev, device, axesMapping.getMotionEvent());
             }
-            updateAxes();
+            //updateAxes();
+            updatePackets();
             if (wifiManager.getConnectionInfo()!=null && mTcpClient != null) {
                 //new SendMessageTask().executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, keyMap);
             }
@@ -136,6 +143,19 @@ public class DroneActivity extends AppCompatActivity {
         return 0;
     }
 
+    private void updatePackets() {
+
+        int[] channels = {1024,1024,1024,1024,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
+        float in_min = -1, in_max = 1, out_min = 0, out_max = 2047;
+
+        for(int i = 0; i< mAxes.length-2;i++) {
+            channels[i] = (char) Math.round((mAxes[i] - in_min) * (out_max - out_min) / (in_max - in_min) + out_min);
+        }
+        channels[mAxes.length-2] = (int) mAxes[mAxes.length-2];
+        channels[mAxes.length-1] = (int) mAxes[mAxes.length-1];
+
+    }
+
     private void updateAxes() {
 
         float in_min = -1, in_max = 1, out_min = 0, out_max = 255;
@@ -149,10 +169,10 @@ public class DroneActivity extends AppCompatActivity {
         keyMapAxes |= (char) mAxes[mAxes.length-2]+1;
         keyMapAxes <<= 2;
         keyMapAxes |= (char) mAxes[mAxes.length-1]+1;
-        textView1.setText("Motion:\n"+Long.toBinaryString(keyMapAxes));
+        //textView1.setText("Motion:\n"+Long.toHexString(keyMapAxes));
         keyMapAxes <<= 12;
         keyMap = (keyMap & 4095) | keyMapAxes; // 0x0000000000000FFF : erase axes
-        textView2.setText("KeyMap:\n"+Long.toBinaryString(keyMap));
+        textView2.setText("KeyMap:\n"+Long.toHexString(keyMap));
     }
 
     public enum AxesMapping {
@@ -196,7 +216,7 @@ public class DroneActivity extends AppCompatActivity {
                     //Log.d(TAG, "dispatchKeyEvent: "+getNameFromCode(event.getKeyCode())+" released");
                     break;
             }
-            textView2.setText("Button:\n"+Long.toBinaryString(keyMap));
+            //textView2.setText("Button:\n"+Long.toBinaryString(keyMap));
             if (wifiManager.getConnectionInfo()!=null && mTcpClient != null) {
                 //new SendMessageTask().executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, keyMap);
             }
@@ -240,15 +260,11 @@ public class DroneActivity extends AppCompatActivity {
     /**
      * Sends a message using a background task to avoid doing long/network operations on the UI thread
      */
-    //public class SendMessageTask extends AsyncTask<String, Void, Void>
-    public class SendMessageTask extends AsyncTask<Long, Void, Void> {
+    public class SendMessageTask extends AsyncTask<char[], Void, Void> {
         @Override
-        //protected Void doInBackground(String... params) {
-        protected Void doInBackground(Long... params) {
+        protected Void doInBackground(char[]... params) {
             Log.d(TAG, "SendMessageTask: executing");
-            mTcpClient.sendMessageLong(params[0]);
-            //mTcpClient.sendMessageString(params[0]);
-
+            mTcpClient.sendMessageChar(params[0]);
             return null;
         }
     }

@@ -34,7 +34,8 @@ public class TcpClient {
         mMessageListener = listener;
     }
 
-    public void sendMessageLong(final long message) {
+
+    public void sendMessageChar(final char[] message) {
         Runnable runnable = new Runnable() {
             @Override
             public void run() {
@@ -42,6 +43,8 @@ public class TcpClient {
                 if (mBufferOut != null) {
                     //Log.d(TAG, "Sending: " + message);
                     mBufferOut.println(message);
+                    Log.d(TAG, "run: message: "+message);
+                    Log.d(TAG, "run: message[0]:"+message[0]);
                     mBufferOut.flush();
                 }
             }
@@ -50,21 +53,6 @@ public class TcpClient {
         thread.start();
     }
 
-    public void sendMessageString(final String message) {
-        Runnable runnable = new Runnable() {
-            @Override
-            public void run() {
-                Log.d(TAG, "run: sendMessage running");
-                if (mBufferOut != null) {
-                    Log.d(TAG, "Sending: " + message);
-                    mBufferOut.println(message);
-                    mBufferOut.flush();
-                }
-            }
-        };
-        Thread thread = new Thread(runnable);
-        thread.start();
-    }
 
     /**
      * Close the connection and release the members
