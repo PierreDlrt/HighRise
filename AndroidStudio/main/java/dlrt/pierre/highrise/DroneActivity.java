@@ -34,8 +34,9 @@ public class DroneActivity extends AppCompatActivity {
 
     int cpt=0;
     public static String IP_addr;
-    char[] sendBuf = new char[] {};
-    private long keyMap = 0;
+    private int[] channels = {1500,1500,1500,1000,0,0,0,0,0,0,0,0,0,0,0,0}; // RC channels (id 0 ->15)
+    private char[] keyMap = {127,0,0,0,0,0,0,0,0,0,0,0,0,0,0}; // my channels (id 0 -> 14)
+    private char[] sendBuf = new char[40];
     private float[] mAxes = new float[AxesMapping.values().length];
 
     private WifiManager wifiManager;
@@ -76,9 +77,9 @@ public class DroneActivity extends AppCompatActivity {
                     if (mTcpClient != null) {
                         Log.d(TAG, "onClick: SendMessageTask created");
                         //new SendMessageTask().executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, keyMap);
-                        new SendMessageTask().executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, sendBuf);
+                        //new SendMessageTask().executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, sendBuf);
                         //sendBuf[0]++;
-                        Log.d(TAG, "onClick: keymap="+Long.toHexString(keyMap));
+                        //Log.d(TAG, "onClick: keymap="+Long.toHexString(keyMap));
                     }
                     //editText.setText("");
                 } else {
@@ -114,10 +115,9 @@ public class DroneActivity extends AppCompatActivity {
             for (AxesMapping axesMapping : AxesMapping.values()) {
                 mAxes[axesMapping.ordinal()] = getCenteredAxis(ev, device, axesMapping.getMotionEvent());
             }
-            //updateAxes();
-            updatePackets();
+            updateChannels();
             if (wifiManager.getConnectionInfo()!=null && mTcpClient != null) {
-                //new SendMessageTask().executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, keyMap);
+                new SendMessageTask().executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, sendBuf);
             }
             return true;
         }
@@ -143,37 +143,29 @@ public class DroneActivity extends AppCompatActivity {
         return 0;
     }
 
-    private void updatePackets() {
-
-        int[] channels = {1024,1024,1024,1024,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
-        float in_min = -1, in_max = 1, out_min = 0, out_max = 2047;
-
-        for(int i = 0; i< mAxes.length-2;i++) {
-            channels[i] = (char) Math.round((mAxes[i] - in_min) * (out_max - out_min) / (in_max - in_min) + out_min);
-        }
-        channels[mAxes.length-2] = (int) mAxes[mAxes.length-2];
-        channels[mAxes.length-1] = (int) mAxes[mAxes.length-1];
-
+    float map(float x, float out_min, float out_max) {
+        return (x + 1) * (out_max - out_min) /2 + out_min;
     }
 
-    private void updateAxes() {
+    private void updateChannels() {
 
-        float in_min = -1, in_max = 1, out_min = 0, out_max = 255;
-        long keyMapAxes = 0;
+        float CHANNEL_RANGE_MIN = 1000, CHANNEL_RANGE_MAX = 2000, CHANNEL_RANGE_CENTER = (CHANNEL_RANGE_MAX - CHANNEL_RANGE_MIN)/2;
 
-        for(int i = 0; i< mAxes.length-2;i++) {
-            keyMapAxes <<= 8;
-            keyMapAxes |= (char) Math.round((mAxes[i] - in_min) * (out_max - out_min) / (in_max - in_min) + out_min);
+        channels[0] = Math.round(map(mAxes[0], CHANNEL_RANGE_MIN, CHANNEL_RANGE_MAX));
+        channels[1] = Math.round(map(mAxes[1], CHANNEL_RANGE_MIN, CHANNEL_RANGE_MAX));
+        channels[2] = Math.round(map(mAxes[2], CHANNEL_RANGE_MIN, CHANNEL_RANGE_MAX));
+        if(channels[26]==0) {
+            channels[3]= Math.round(map(mAxes[4], CHANNEL_RANGE_CENTER, CHANNEL_RANGE_MIN));
         }
-        keyMapAxes <<= 2;
-        keyMapAxes |= (char) mAxes[mAxes.length-2]+1;
-        keyMapAxes <<= 2;
-        keyMapAxes |= (char) mAxes[mAxes.length-1]+1;
-        //textView1.setText("Motion:\n"+Long.toHexString(keyMapAxes));
-        keyMapAxes <<= 12;
-        keyMap = (keyMap & 4095) | keyMapAxes; // 0x0000000000000FFF : erase axes
-        textView2.setText("KeyMap:\n"+Long.toHexString(keyMap));
+        if(channels[25]==0) {
+            channels[3]= Math.round(map(mAxes[5], CHANNEL_RANGE_CENTER, CHANNEL_RANGE_MAX));
+        }
+        keyMap[0] = (char) Math.round(map(mAxes[3], 0, 255));
+        keyMap[1] = (char) (mAxes[6]+1);
+        keyMap[2] = (char) (mAxes[7]+1);
+        channelsToPackets();
     }
+
 
     public enum AxesMapping {
         AXIS_X(MotionEvent.AXIS_X), // Left joystick, left/right
@@ -203,57 +195,91 @@ public class DroneActivity extends AppCompatActivity {
         // Update device state for visualization and logging.
         InputDevice dev = mInputManager.getInputDevice(event.getDeviceId());
         //TextView textView = findViewById(R.id.textView);
+        int keyCode = event.getKeyCode();
 
-        if (dev != null) {
+        if (dev != null && getButton(keyCode) != -1) {
             switch (event.getAction()) {
                 case KeyEvent.ACTION_DOWN:
-                    keyMap |= updateButton(event.getKeyCode());
+                    keyMap[getButton(keyCode)] = 1;
                     //Log.d(TAG, "dispatchKeyEvent: "+getNameFromCode(event.getKeyCode())+" pressed");
                     //textView.setText(getNameFromCode(event.getKeyCode()));
                     break;
                 case KeyEvent.ACTION_UP:
-                    keyMap &= ~updateButton(event.getKeyCode());
+                    keyMap[getButton(keyCode)] = 0;
                     //Log.d(TAG, "dispatchKeyEvent: "+getNameFromCode(event.getKeyCode())+" released");
                     break;
             }
+            channelsToPackets();
             //textView2.setText("Button:\n"+Long.toBinaryString(keyMap));
             if (wifiManager.getConnectionInfo()!=null && mTcpClient != null) {
-                //new SendMessageTask().executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, keyMap);
+                new SendMessageTask().executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, sendBuf);
             }
         }
         return super.dispatchKeyEvent(event);
     }
 
-    private Long updateButton(int keyCode) {
+    private int getButton(int keyCode) {
         switch (keyCode) {
-            case KeyEvent.KEYCODE_Q:
-                return (long) 1 << 12;
             case KeyEvent.KEYCODE_BUTTON_A: // Square
-                return (long) 1 << 11;
+                return 3;
             case KeyEvent.KEYCODE_BUTTON_B: // Cross
-                return (long) 1 << 10;
+                return 4;
             case KeyEvent.KEYCODE_BUTTON_C: // Circle
-                return (long) 1 << 9;
+                return 5;
             case KeyEvent.KEYCODE_BUTTON_X: // Triangle
-                return (long) 1 << 8;
+                return 6;
             case KeyEvent.KEYCODE_BUTTON_Y: // L1
-                return (long) 1 << 7;
+                return 7;
             case KeyEvent.KEYCODE_BUTTON_Z: // R1
-                return (long) 1 << 6;
+                return 8;
             case KeyEvent.KEYCODE_BUTTON_L1: // L2
-                return (long) 1 << 5;
+                return 9;
             case KeyEvent.KEYCODE_BUTTON_R1: // R2
-                return (long) 1 << 4;
+                return 10;
+            case KeyEvent.KEYCODE_BUTTON_SELECT: // L3
+                return 11;
             case KeyEvent.KEYCODE_BUTTON_L2: // Share
-                return (long) 1 << 3;
+                return 12;
             case KeyEvent.KEYCODE_BUTTON_R2: // Option
-                return (long) 1 << 2;
-            case KeyEvent.KEYCODE_BUTTON_MODE: // PS button
-                return (long) 1 << 1;
+                return 13;
             case KeyEvent.KEYCODE_BUTTON_THUMBL: // Big central button
-                return (long) 1;
+                return 14;
             default:
-                return (long) 0;
+                return -1;
+        }
+    }
+
+    private void channelsToPackets(){
+
+        sendBuf[0] = 0x0F;
+        sendBuf[1] = (char) ((channels[0] & 0x07FF));
+        sendBuf[2] = (char) ((channels[0] & 0x07FF)>>8 | (channels[1] & 0x07FF)<<3);
+        sendBuf[3] = (char) ((channels[1] & 0x07FF)>>5 | (channels[2] & 0x07FF)<<6);
+        sendBuf[4] = (char) ((channels[2] & 0x07FF)>>2);
+        sendBuf[5] = (char) ((channels[2] & 0x07FF)>>10 | (channels[3] & 0x07FF)<<1);
+        sendBuf[6] = (char) ((channels[3] & 0x07FF)>>7 | (channels[4] & 0x07FF)<<4);
+        sendBuf[7] = (char) ((channels[4] & 0x07FF)>>4 | (channels[5] & 0x07FF)<<7);
+        sendBuf[8] = (char) ((channels[5] & 0x07FF)>>1);
+
+        sendBuf[9] = (char) ((channels[5] & 0x07FF)>>9 | (channels[6] & 0x07FF)<<2);
+        sendBuf[10] = (char) ((channels[6] & 0x07FF)>>6 | (channels[7] & 0x07FF)<<5);
+        sendBuf[11] = (char) ((channels[7] & 0x07FF)>>3);
+        sendBuf[12] = (char) ((channels[8] & 0x07FF));
+        sendBuf[13] = (char) ((channels[8] & 0x07FF)>>8 | (channels[9] & 0x07FF)<<3);
+        sendBuf[14] = (char) ((channels[9] & 0x07FF)>>5 | (channels[10] & 0x07FF)<<6);
+        sendBuf[15] = (char) ((channels[10] & 0x07FF)>>2);
+        sendBuf[16] = (char) ((channels[10] & 0x07FF)>>10 | (channels[11] & 0x07FF)<<1);
+        sendBuf[17] = (char) ((channels[11] & 0x07FF)>>7 | (channels[12] & 0x07FF)<<4);
+        sendBuf[18] = (char) ((channels[12] & 0x07FF)>>4 | (channels[13] & 0x07FF)<<7);
+        sendBuf[19] = (char) ((channels[13] & 0x07FF)>>1);
+        sendBuf[20] = (char) ((channels[13] & 0x07FF)>>9 | (channels[14] & 0x07FF)<<2);
+        sendBuf[21] = (char) ((channels[14] & 0x07FF)>>6 | (channels[15] & 0x07FF)<<5);
+        sendBuf[22] = (char) ((channels[15] & 0x07FF)>>3);
+        sendBuf[23] = 0x00;
+        sendBuf[24] = 0x00;
+
+        for (int i=0; i<15; i++){
+            sendBuf[i+25] = keyMap[i];
         }
     }
 
