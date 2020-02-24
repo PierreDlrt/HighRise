@@ -34,9 +34,10 @@ public class DroneActivity extends AppCompatActivity {
 
     int cpt=0;
     public static String IP_addr;
-    private int[] channels = {1500,1500,1500,1000,0,0,0,0,0,0,0,0,0,0,0,0}; // RC channels (id 0 ->15)
+    private short[] channels = {1500,1500,1500,1000,0,0,0,0,0,0,0,0,0,0,0,0}; // RC channels (id 0 ->15)
     private char[] keyMap = {127,0,0,0,0,0,0,0,0,0,0,0,0,0,0}; // my channels (id 0 -> 14)
     private char[] sendBuf = new char[40];
+    private char[] sendBufTest = {15, 127, 128, 136, 195, 255, 240, 170};
     private float[] mAxes = new float[AxesMapping.values().length];
 
     private WifiManager wifiManager;
@@ -77,8 +78,13 @@ public class DroneActivity extends AppCompatActivity {
                     if (mTcpClient != null) {
                         Log.d(TAG, "onClick: SendMessageTask created");
                         //new SendMessageTask().executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, keyMap);
-                        //new SendMessageTask().executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, sendBuf);
+                        new SendMessageTask().executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, sendBufTest);
                         //sendBuf[0]++;
+                        textView1.setText("");
+                        for (int i=0; i<sendBufTest.length; i++){
+                            textView1.append("sendBufTest = "+Integer.toBinaryString(sendBufTest[i])+"\n");
+                        }
+
                         //Log.d(TAG, "onClick: keymap="+Long.toHexString(keyMap));
                     }
                     //editText.setText("");
@@ -117,7 +123,7 @@ public class DroneActivity extends AppCompatActivity {
             }
             updateChannels();
             if (wifiManager.getConnectionInfo()!=null && mTcpClient != null) {
-                new SendMessageTask().executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, sendBuf);
+                //new SendMessageTask().executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, sendBuf);
             }
             return true;
         }
@@ -151,18 +157,15 @@ public class DroneActivity extends AppCompatActivity {
 
         float CHANNEL_RANGE_MIN = 1000, CHANNEL_RANGE_MAX = 2000, CHANNEL_RANGE_CENTER = (CHANNEL_RANGE_MAX - CHANNEL_RANGE_MIN)/2;
 
-        channels[0] = Math.round(map(mAxes[0], CHANNEL_RANGE_MIN, CHANNEL_RANGE_MAX));
-        channels[1] = Math.round(map(mAxes[1], CHANNEL_RANGE_MIN, CHANNEL_RANGE_MAX));
-        channels[2] = Math.round(map(mAxes[2], CHANNEL_RANGE_MIN, CHANNEL_RANGE_MAX));
-        if(channels[26]==0) {
-            channels[3]= Math.round(map(mAxes[4], CHANNEL_RANGE_CENTER, CHANNEL_RANGE_MIN));
-        }
-        if(channels[25]==0) {
-            channels[3]= Math.round(map(mAxes[5], CHANNEL_RANGE_CENTER, CHANNEL_RANGE_MAX));
-        }
+        channels[0] = (short) Math.round(map(mAxes[0], CHANNEL_RANGE_MIN, CHANNEL_RANGE_MAX));
+        channels[1] = (short) Math.round(map(mAxes[1], CHANNEL_RANGE_MIN, CHANNEL_RANGE_MAX));
+        channels[2] = (short) Math.round(map(mAxes[2], CHANNEL_RANGE_MIN, CHANNEL_RANGE_MAX));
+        channels[3] = (short) Math.round(map(mAxes[5], CHANNEL_RANGE_MIN, CHANNEL_RANGE_MAX));
+
         keyMap[0] = (char) Math.round(map(mAxes[3], 0, 255));
         keyMap[1] = (char) (mAxes[6]+1);
         keyMap[2] = (char) (mAxes[7]+1);
+
         channelsToPackets();
     }
 
@@ -194,25 +197,20 @@ public class DroneActivity extends AppCompatActivity {
         Log.d(TAG, "entered dispatchKeyEvent");
         // Update device state for visualization and logging.
         InputDevice dev = mInputManager.getInputDevice(event.getDeviceId());
-        //TextView textView = findViewById(R.id.textView);
         int keyCode = event.getKeyCode();
 
         if (dev != null && getButton(keyCode) != -1) {
             switch (event.getAction()) {
                 case KeyEvent.ACTION_DOWN:
                     keyMap[getButton(keyCode)] = 1;
-                    //Log.d(TAG, "dispatchKeyEvent: "+getNameFromCode(event.getKeyCode())+" pressed");
-                    //textView.setText(getNameFromCode(event.getKeyCode()));
                     break;
                 case KeyEvent.ACTION_UP:
                     keyMap[getButton(keyCode)] = 0;
-                    //Log.d(TAG, "dispatchKeyEvent: "+getNameFromCode(event.getKeyCode())+" released");
                     break;
             }
             channelsToPackets();
-            //textView2.setText("Button:\n"+Long.toBinaryString(keyMap));
             if (wifiManager.getConnectionInfo()!=null && mTcpClient != null) {
-                new SendMessageTask().executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, sendBuf);
+                //new SendMessageTask().executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, sendBuf);
             }
         }
         return super.dispatchKeyEvent(event);
@@ -260,7 +258,6 @@ public class DroneActivity extends AppCompatActivity {
         sendBuf[6] = (char) ((channels[3] & 0x07FF)>>7 | (channels[4] & 0x07FF)<<4);
         sendBuf[7] = (char) ((channels[4] & 0x07FF)>>4 | (channels[5] & 0x07FF)<<7);
         sendBuf[8] = (char) ((channels[5] & 0x07FF)>>1);
-
         sendBuf[9] = (char) ((channels[5] & 0x07FF)>>9 | (channels[6] & 0x07FF)<<2);
         sendBuf[10] = (char) ((channels[6] & 0x07FF)>>6 | (channels[7] & 0x07FF)<<5);
         sendBuf[11] = (char) ((channels[7] & 0x07FF)>>3);
@@ -278,8 +275,20 @@ public class DroneActivity extends AppCompatActivity {
         sendBuf[23] = 0x00;
         sendBuf[24] = 0x00;
 
+        textView1.setText("");
+        for (int j=0; j<25; j++){
+            textView1.append("packet["+j+"] = "+String.format("%02X\n",(byte) sendBuf[j]));
+        }
+
+        textView2.setText("");
         for (int i=0; i<15; i++){
             sendBuf[i+25] = keyMap[i];
+            textView2.append("myChannels["+i+"] = "+String.format("%02X\n",(byte) sendBuf[i+25]));
+        }
+
+        textView2.append("\n");
+        for (int k=0; k<sendBufTest.length; k++) {
+            textView2.append("sendBufTest["+k+"] = "+String.format("%02X\n",sendBufTest[k]+"\n"));
         }
     }
 
@@ -290,7 +299,7 @@ public class DroneActivity extends AppCompatActivity {
         @Override
         protected Void doInBackground(char[]... params) {
             Log.d(TAG, "SendMessageTask: executing");
-            mTcpClient.sendMessageChar(params[0]);
+            mTcpClient.sendMessageByte(params[0]);
             return null;
         }
     }

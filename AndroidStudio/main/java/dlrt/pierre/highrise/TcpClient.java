@@ -35,7 +35,7 @@ public class TcpClient {
     }
 
 
-    public void sendMessageChar(final char[] message) {
+    public void sendMessageByte(final char[] message) {
         Runnable runnable = new Runnable() {
             @Override
             public void run() {
