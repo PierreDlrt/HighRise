@@ -90,7 +90,7 @@ unsigned long  g_ulStaIp = 0;
 unsigned long  g_ulPingPacketsRecv = 0;
 unsigned long  g_uiGatewayIP = 0;
 unsigned char g_cBsdSendBuf[BUF_SIZE];
-char g_cBsdRecvBuf[BUF_SIZE]= {0};
+unsigned short g_cBsdRecvBuf[BUF_SIZE]= {0};
 
 
 OsiMsgQ_t msgQfb = NULL;
@@ -500,6 +500,18 @@ static int ConfigureMode(int iMode)
 }
 
 
+void printBinary(unsigned char byte) {
+    UART_PRINT("%d%d%d%d%d%d%d%d\n\r", \
+        (byte & 0x80 ? 1 : 0), \
+        (byte & 0x40 ? 1 : 0), \
+        (byte & 0x20 ? 1 : 0), \
+        (byte & 0x10 ? 1 : 0), \
+        (byte & 0x08 ? 1 : 0), \
+        (byte & 0x04 ? 1 : 0), \
+        (byte & 0x02 ? 1 : 0), \
+        (byte & 0x01 ? 1 : 0));
+}
+
 
 void ServerTCP( void *pvParameters )
 {
@@ -606,6 +618,7 @@ int connectionManager() {
     long            lNonBlocking = 1;
     int             iNewSockID;
     int             iTestBufLen;
+    int             i;
     //unsigned long   num;
 
     iTestBufLen  = BUF_SIZE;
@@ -613,7 +626,7 @@ int connectionManager() {
     while(IS_IP_LEASED(g_ulStatus)){
         //waiting for the client to connect
         UART_PRINT("Client is connected to Device\n\r");
-        UART_PRINT("g_cBsdRecvBuf = %s\n\r", g_cBsdRecvBuf);
+        //UART_PRINT("g_cBsdRecvBuf = %s\n\r", g_cBsdRecvBuf);
 
         ////////////////////////// Client connected to Device /////////////////////////////
 
@@ -702,7 +715,7 @@ int connectionManager() {
                                 //MAP_UtilsDelay(10000);
                             }
                             else if (iStatus > 0) {
-                                UART_PRINT("[Message received] %02X, %02X, %02X, %02X, %02X, %02X, %02X, %02X\n\r",\
+                                UART_PRINT("[Message received] %04X, %04X, %04X, %04X, %04X, %04X, %04X, %04X\n\r",\
                                            g_cBsdRecvBuf[0],\
                                            g_cBsdRecvBuf[1],\
                                            g_cBsdRecvBuf[2],\
@@ -711,6 +724,10 @@ int connectionManager() {
                                            g_cBsdRecvBuf[5],\
                                            g_cBsdRecvBuf[6],\
                                            g_cBsdRecvBuf[7]);
+                                /*for (i=0; i<15; i++){
+                                    UART_PRINT("g_cBsdRecvBuf[%d] = ", i);
+                                    printBinary(g_cBsdRecvBuf[i]);
+                                }*/
                                 //UART_PRINT("[Message received] %s\r",g_cBsdRecvBuf);
                                 //num = (num < 0) ? 1 + (~(unsigned long)(-num)) : num;
                                 /*iStatus = sl_Send(iNewSockID, g_cBsdSendBuf, iTestBufLen, 0);*/
@@ -743,7 +760,7 @@ void CommandManager(void *pvParameters) {
     static uint8_t packet[NUM_PACKET], myChannels[NUM_MY_CHANNEL]={0};
     int i;
     TickType_t xLastWakeTime;
-    const TickType_t xFrequency = 100; // SBUS protocol sends every 14ms (analog mode) or 7ms (highspeed mode)
+    const TickType_t xFrequency = 500; // SBUS protocol sends every 14ms (analog mode) or 7ms (highspeed mode)
 
 
     /*MAP_UARTConfigSetExpClk(UARTA1_BASE,MAP_PRCMPeripheralClockGet(PRCM_UARTA1), \
@@ -757,29 +774,29 @@ void CommandManager(void *pvParameters) {
             /*
              * g_cBsdRecvBuf = [25 SBUS formatted packets, 15 channels containing key events]
              */
-            for (i=0; i<NUM_PACKET; i++){
+            /*for (i=0; i<NUM_PACKET; i++){
                 packet[i] = g_cBsdRecvBuf[i];
             }
-            for(i=NUM_PACKET; i<NUM_MY_CHANNEL+NUM_PACKET; i++){
-                myChannels[i] = g_cBsdRecvBuf[i];
-            }
+            for (i=0; i<NUM_MY_CHANNEL; i++){
+                myChannels[i] = g_cBsdRecvBuf[i+NUM_PACKET];
+            }*/
 
-            ClearTerm();
-            UART_PRINT("\n\r--------------------\n\r");
+            /*ClearTerm();
+            UART_PRINT("\n\r----------------------------\n\r");
             UART_PRINT("\tSBUS PACKETS\n\r");
-            UART_PRINT("--------------------\n\r");
+            UART_PRINT("----------------------------\n\r");
             for (i=0; i<NUM_PACKET; i++) {
                 //MAP_UARTCharPut(UARTA1_BASE, packet[i]);
                 UART_PRINT("packet[%d]: %02X\n\r", i, packet[i]);
             }
-            UART_PRINT("\n\r--------------------\n\r");
+            UART_PRINT("\n\r----------------------------\n\r");
             UART_PRINT("\tMY CHANNELS\n\r");
-            UART_PRINT("--------------------\n\r");
+            UART_PRINT("----------------------------\n\r");
             for (i=0; i<NUM_MY_CHANNEL; i++) {
                 //MAP_UARTCharPut(UARTA1_BASE, packet[i]);
                 UART_PRINT("myChannels[%d]: %02X\n\r", i, myChannels[i]);
             }
-            UART_PRINT("\33[%dA", 4+3); // Move terminal cursor up %d lines
+            UART_PRINT("\33[%dA", 100); // Move terminal cursor up %d lines*/
         }
 
         vTaskDelayUntil( &xLastWakeTime, xFrequency );
