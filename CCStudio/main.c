@@ -90,7 +90,7 @@ unsigned long  g_ulStaIp = 0;
 unsigned long  g_ulPingPacketsRecv = 0;
 unsigned long  g_uiGatewayIP = 0;
 unsigned char g_cBsdSendBuf[BUF_SIZE];
-unsigned short g_cBsdRecvBuf[BUF_SIZE]= {0};
+uint16_t g_cBsdRecvBuf[BUF_SIZE]= {0};
 
 
 OsiMsgQ_t msgQfb = NULL;
@@ -501,7 +501,7 @@ static int ConfigureMode(int iMode)
 
 
 void printBinary(unsigned char byte) {
-    UART_PRINT("%d%d%d%d%d%d%d%d\n\r", \
+    UART_PRINT("%d%d%d%d%d%d%d%d = %d\n\r", \
         (byte & 0x80 ? 1 : 0), \
         (byte & 0x40 ? 1 : 0), \
         (byte & 0x20 ? 1 : 0), \
@@ -509,7 +509,29 @@ void printBinary(unsigned char byte) {
         (byte & 0x08 ? 1 : 0), \
         (byte & 0x04 ? 1 : 0), \
         (byte & 0x02 ? 1 : 0), \
-        (byte & 0x01 ? 1 : 0));
+        (byte & 0x01 ? 1 : 0), \
+        byte);
+}
+
+void printdBinary(uint16_t dbyte) {
+    UART_PRINT("%d%d%d%d%d%d%d%d %d%d%d%d%d%d%d%d = %d\n\r", \
+            (dbyte & 0x8000 ? 1 : 0), \
+            (dbyte & 0x4000 ? 1 : 0), \
+            (dbyte & 0x2000 ? 1 : 0), \
+            (dbyte & 0x1000 ? 1 : 0), \
+            (dbyte & 0x0800 ? 1 : 0), \
+            (dbyte & 0x0400 ? 1 : 0), \
+            (dbyte & 0x0200 ? 1 : 0), \
+            (dbyte & 0x0100 ? 1 : 0), \
+            (dbyte & 0x0080 ? 1 : 0), \
+            (dbyte & 0x0040 ? 1 : 0), \
+            (dbyte & 0x0020 ? 1 : 0), \
+            (dbyte & 0x0010 ? 1 : 0), \
+            (dbyte & 0x0008 ? 1 : 0), \
+            (dbyte & 0x0004 ? 1 : 0), \
+            (dbyte & 0x0002 ? 1 : 0), \
+            (dbyte & 0x0001 ? 1 : 0), \
+            dbyte);
 }
 
 
@@ -619,6 +641,7 @@ int connectionManager() {
     int             iNewSockID;
     int             iTestBufLen;
     int             i;
+    int             cpt=0;
     //unsigned long   num;
 
     iTestBufLen  = BUF_SIZE;
@@ -715,7 +738,7 @@ int connectionManager() {
                                 //MAP_UtilsDelay(10000);
                             }
                             else if (iStatus > 0) {
-                                UART_PRINT("[Message received] %04X, %04X, %04X, %04X, %04X, %04X, %04X, %04X\n\r",\
+                                /*UART_PRINT("[Message received] %04X, %04X, %04X, %04X, %04X, %04X, %04X, %04X\n\r",\
                                            g_cBsdRecvBuf[0],\
                                            g_cBsdRecvBuf[1],\
                                            g_cBsdRecvBuf[2],\
@@ -723,13 +746,14 @@ int connectionManager() {
                                            g_cBsdRecvBuf[4],\
                                            g_cBsdRecvBuf[5],\
                                            g_cBsdRecvBuf[6],\
-                                           g_cBsdRecvBuf[7]);
-                                /*for (i=0; i<15; i++){
+                                           g_cBsdRecvBuf[7]);*/
+                                cpt++;
+                                UART_PRINT("packet %d\n\r", cpt);
+                                for (i=0; i<15; i++){
                                     UART_PRINT("g_cBsdRecvBuf[%d] = ", i);
-                                    printBinary(g_cBsdRecvBuf[i]);
-                                }*/
-                                //UART_PRINT("[Message received] %s\r",g_cBsdRecvBuf);
-                                //num = (num < 0) ? 1 + (~(unsigned long)(-num)) : num;
+                                    printdBinary(g_cBsdRecvBuf[i]);
+                                }
+
                                 /*iStatus = sl_Send(iNewSockID, g_cBsdSendBuf, iTestBufLen, 0);*/
                             }
                             else {
