@@ -1,21 +1,13 @@
 package dlrt.pierre.highrise;
 
-import android.app.Activity;
-import android.content.Context;
-import android.net.wifi.WifiManager;
-import android.text.format.Formatter;
 import android.util.Log;
-import android.widget.TextView;
 
 import java.io.BufferedReader;
-import java.io.BufferedWriter;
 import java.io.DataOutputStream;
 import java.io.IOException;
-import java.io.PrintWriter;
 import java.net.InetAddress;
 import java.net.Socket;
 import java.io.InputStreamReader;
-import java.io.OutputStreamWriter;
 
 
 public class TcpClient {
@@ -28,11 +20,9 @@ public class TcpClient {
     // while this is true, the server will continue running
     public boolean mRun = false;
     // used to send messages
-    //private PrintWriter mBufferOut;
     private DataOutputStream mBufferOut;
     // used to read messages from the server
     private BufferedReader mBufferIn;
-    int cpt=0;
 
     public TcpClient(OnMessageReceived listener) {
         mMessageListener = listener;
@@ -51,30 +41,8 @@ public class TcpClient {
                         for (int i=0; i<message.length; i++){
                             b[2*i] = (byte) message[i];
                             b[2*i+1] = (byte) (message[i] >> 8);
-                            Log.d(TAG, "run: byte 1:"+
-                                    ((b[2*i] & 1 << 8) >> 8 ) + "" +
-                                    ((b[2*i] & 1 << 7) >> 7 ) + "" +
-                                    ((b[2*i] & 1 << 6) >> 6 ) + "" +
-                                    ((b[2*i] & 1 << 5) >> 5 ) + "" +
-                                    ((b[2*i] & 1 << 4) >> 4 ) + "" +
-                                    ((b[2*i] & 1 << 3) >> 3 ) + "" +
-                                    ((b[2*i] & 1 << 2) >> 2 ) + "" +
-                                    ((b[2*i] & 1 << 1) >> 1 ) + "" +
-                                    ((b[2*i] & 1)));
-                            Log.d(TAG, "run: byte 2:"+
-                                    ((b[2*i+1] & 1 << 8) >> 8 ) + "" +
-                                    ((b[2*i+1] & 1 << 7) >> 7 ) + "" +
-                                    ((b[2*i+1] & 1 << 6) >> 6 ) + "" +
-                                    ((b[2*i+1] & 1 << 5) >> 5 ) + "" +
-                                    ((b[2*i+1] & 1 << 4) >> 4 ) + "" +
-                                    ((b[2*i+1] & 1 << 3) >> 3 ) + "" +
-                                    ((b[2*i+1] & 1 << 2) >> 2 ) + "" +
-                                    ((b[2*i+1] & 1 << 1) >> 1 ) + "" +
-                                    ((b[2*i+1] & 1)));
                         }
                         mBufferOut.write(b);
-                        cpt++;
-                        Log.d(TAG, "run: after writeChars : "+cpt);
                         mBufferOut.flush();
                     } catch (IOException e) {
                         e.printStackTrace();
@@ -125,7 +93,6 @@ public class TcpClient {
 
                 Log.d(TAG, "run: socket created");
                 //sends the message to the server
-                //mBufferOut = new PrintWriter(new BufferedWriter(new OutputStreamWriter(socket.getOutputStream())), true);
                 mBufferOut = new DataOutputStream(socket.getOutputStream());
                 //receives the message which the server sends back
                 mBufferIn = new BufferedReader(new InputStreamReader(socket.getInputStream()));

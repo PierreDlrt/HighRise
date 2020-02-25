@@ -34,8 +34,8 @@ public class DroneActivity extends AppCompatActivity {
 
     int cpt=0;
     public static String IP_addr;
-    private char[] channels = {1500,1500,1500,1000,0,0,0,0,0,0,0,0,0,0,0,0}; // RC channels (id 0 ->15)
-    private char[] keyMap = {127,0,0,0,0,0,0,0,0,0,0,0,0,0,0}; // my channels (id 0 -> 14)
+    private char[] channels = {1500,1500,1500,1000,0,0,0,0,0,0,0,0,0,0,0,0, // RC channels (id 0 ->15)
+                            1000,1500,0,0,0,0,0,0,0,0,0,0,0,0,0,0}; // my channels (id 16 -> 31)
     private char[] sendBuf = new char[40];
     //private char[] sendBufTest = {15, 127, 128, 136, 195, 255, 240, 170};
     private char[] sendBufTest = {1, 255, 0xAA55, 256, 0xCCCC, 0, 0xFFFF};
@@ -75,43 +75,15 @@ public class DroneActivity extends AppCompatActivity {
             @Override
             public void onClick(View view) {
                 if (wifiManager.getConnectionInfo()!=null) {
-                    //String message = editText.getText().toString();
                     if (mTcpClient != null) {
                         Log.d(TAG, "onClick: SendMessageTask created");
-                        //new SendMessageTask().executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, keyMap);
-                        /*for(int i=0; i<sendBufTest.length; i++){
-                            if(sendBufTest[i]<255){
-
-                            }
-                        }*/
                         new SendMessageTask().executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, sendBufTest);
-                        //sendBuf[0]++;
-                        textView1.setText("");
+                        /*textView1.setText("");
                         textView2.setText("");
                         for (int i=0; i<sendBufTest.length; i++){
                             textView1.append("sendBufTest = "+Integer.toBinaryString(sendBufTest[i])+"\n");
-                            /*textView1.append("sendBufTest = "+
-                                    ((sendBufTest[i] & 1 << 15) >> 15 ) + "" +
-                                    ((sendBufTest[i] & 1 << 14) >> 14 ) + "" +
-                                    ((sendBufTest[i] & 1 << 13) >> 13 ) + "" +
-                                    ((sendBufTest[i] & 1 << 12) >> 12 ) + "" +
-                                    ((sendBufTest[i] & 1 << 11) >> 11 ) + "" +
-                                    ((sendBufTest[i] & 1 << 10) >> 10 ) + "" +
-                                    ((sendBufTest[i] & 1 << 9) >> 9 ) + "" +
-                                    ((sendBufTest[i] & 1 << 8) >> 8 ) + "" +
-                                    ((sendBufTest[i] & 1 << 7) >> 7 ) + "" +
-                                    ((sendBufTest[i] & 1 << 6) >> 6 ) + "" +
-                                    ((sendBufTest[i] & 1 << 5) >> 5 ) + "" +
-                                    ((sendBufTest[i] & 1 << 4) >> 4 ) + "" +
-                                    ((sendBufTest[i] & 1 << 3) >> 3 ) + "" +
-                                    ((sendBufTest[i] & 1 << 2) >> 2 ) + "" +
-                                    ((sendBufTest[i] & 1 << 1) >> 1 ) + "" +
-                                    ((sendBufTest[i] & 1))+"\n");*/
-                            //textView2.append(Integer.toHexString(sendBufTest[i])+"\n");
-                        }
-                        //Log.d(TAG, "onClick: keymap="+Long.toHexString(keyMap));
+                        }*/
                     }
-                    //editText.setText("");
                 } else {
                     Toast.makeText(getApplicationContext(),"No connected device", Toast.LENGTH_SHORT).show();
                 }
@@ -139,7 +111,6 @@ public class DroneActivity extends AppCompatActivity {
 
     @Override
     public boolean dispatchGenericMotionEvent(MotionEvent ev) {
-        // Log.d(TAG, "onGenericMotionEvent: " + ev);
         InputDevice device = ev.getDevice();
         // Only care about game controllers.
         if (device != null) {
@@ -188,9 +159,10 @@ public class DroneActivity extends AppCompatActivity {
         channels[2] = (char) Math.round(map(mAxes[2], CHANNEL_RANGE_MIN, CHANNEL_RANGE_MAX));
         channels[3] = (char) Math.round(map(mAxes[5], CHANNEL_RANGE_MIN, CHANNEL_RANGE_MAX));
 
-        keyMap[0] = (char) Math.round(map(mAxes[3], 0, 255));
-        keyMap[1] = (char) (mAxes[6]+1);
-        keyMap[2] = (char) (mAxes[7]+1);
+        channels[16] = (char) Math.round(map(mAxes[4], CHANNEL_RANGE_MIN, CHANNEL_RANGE_MAX));
+        channels[17] = (char) Math.round(map(mAxes[3], CHANNEL_RANGE_MIN, CHANNEL_RANGE_MAX));
+        channels[18] = (char) (mAxes[6]+1);
+        channels[19] = (char) (mAxes[7]+1);
 
         //channelsToPackets();
     }
@@ -228,10 +200,12 @@ public class DroneActivity extends AppCompatActivity {
         if (dev != null && getButton(keyCode) != -1) {
             switch (event.getAction()) {
                 case KeyEvent.ACTION_DOWN:
-                    keyMap[getButton(keyCode)] = 1;
+                    textView2.setText("up "+keyCode);
+                    channels[getButton(keyCode)] = 1;
                     break;
                 case KeyEvent.ACTION_UP:
-                    keyMap[getButton(keyCode)] = 0;
+                    textView1.setText("down "+keyCode);
+                    channels[getButton(keyCode)] = 0;
                     break;
             }
             //channelsToPackets();
@@ -245,76 +219,31 @@ public class DroneActivity extends AppCompatActivity {
     private int getButton(int keyCode) {
         switch (keyCode) {
             case KeyEvent.KEYCODE_BUTTON_A: // Square
-                return 3;
+                return 20;
             case KeyEvent.KEYCODE_BUTTON_B: // Cross
-                return 4;
+                return 21;
             case KeyEvent.KEYCODE_BUTTON_C: // Circle
-                return 5;
+                return 22;
             case KeyEvent.KEYCODE_BUTTON_X: // Triangle
-                return 6;
+                return 23;
             case KeyEvent.KEYCODE_BUTTON_Y: // L1
-                return 7;
+                return 24;
             case KeyEvent.KEYCODE_BUTTON_Z: // R1
-                return 8;
+                return 25;
             case KeyEvent.KEYCODE_BUTTON_L1: // L2
-                return 9;
+                return 26;
             case KeyEvent.KEYCODE_BUTTON_R1: // R2
-                return 10;
+                return 27;
             case KeyEvent.KEYCODE_BUTTON_SELECT: // L3
-                return 11;
+                return 28;
             case KeyEvent.KEYCODE_BUTTON_L2: // Share
-                return 12;
+                return 29;
             case KeyEvent.KEYCODE_BUTTON_R2: // Option
-                return 13;
+                return 30;
             case KeyEvent.KEYCODE_BUTTON_THUMBL: // Big central button
-                return 14;
+                return 31;
             default:
                 return -1;
-        }
-    }
-
-    private void channelsToPackets(){
-
-        sendBuf[0] = 0x0F;
-        sendBuf[1] = (char) ((channels[0] & 0x07FF));
-        sendBuf[2] = (char) ((channels[0] & 0x07FF)>>8 | (channels[1] & 0x07FF)<<3);
-        sendBuf[3] = (char) ((channels[1] & 0x07FF)>>5 | (channels[2] & 0x07FF)<<6);
-        sendBuf[4] = (char) ((channels[2] & 0x07FF)>>2);
-        sendBuf[5] = (char) ((channels[2] & 0x07FF)>>10 | (channels[3] & 0x07FF)<<1);
-        sendBuf[6] = (char) ((channels[3] & 0x07FF)>>7 | (channels[4] & 0x07FF)<<4);
-        sendBuf[7] = (char) ((channels[4] & 0x07FF)>>4 | (channels[5] & 0x07FF)<<7);
-        sendBuf[8] = (char) ((channels[5] & 0x07FF)>>1);
-        sendBuf[9] = (char) ((channels[5] & 0x07FF)>>9 | (channels[6] & 0x07FF)<<2);
-        sendBuf[10] = (char) ((channels[6] & 0x07FF)>>6 | (channels[7] & 0x07FF)<<5);
-        sendBuf[11] = (char) ((channels[7] & 0x07FF)>>3);
-        sendBuf[12] = (char) ((channels[8] & 0x07FF));
-        sendBuf[13] = (char) ((channels[8] & 0x07FF)>>8 | (channels[9] & 0x07FF)<<3);
-        sendBuf[14] = (char) ((channels[9] & 0x07FF)>>5 | (channels[10] & 0x07FF)<<6);
-        sendBuf[15] = (char) ((channels[10] & 0x07FF)>>2);
-        sendBuf[16] = (char) ((channels[10] & 0x07FF)>>10 | (channels[11] & 0x07FF)<<1);
-        sendBuf[17] = (char) ((channels[11] & 0x07FF)>>7 | (channels[12] & 0x07FF)<<4);
-        sendBuf[18] = (char) ((channels[12] & 0x07FF)>>4 | (channels[13] & 0x07FF)<<7);
-        sendBuf[19] = (char) ((channels[13] & 0x07FF)>>1);
-        sendBuf[20] = (char) ((channels[13] & 0x07FF)>>9 | (channels[14] & 0x07FF)<<2);
-        sendBuf[21] = (char) ((channels[14] & 0x07FF)>>6 | (channels[15] & 0x07FF)<<5);
-        sendBuf[22] = (char) ((channels[15] & 0x07FF)>>3);
-        sendBuf[23] = 0x00;
-        sendBuf[24] = 0x00;
-
-        textView1.setText("");
-        for (int j=0; j<25; j++){
-            textView1.append("packet["+j+"] = "+String.format("%02X\n",(byte) sendBuf[j]));
-        }
-
-        textView2.setText("");
-        for (int i=0; i<15; i++){
-            sendBuf[i+25] = keyMap[i];
-            textView2.append("myChannels["+i+"] = "+String.format("%02X\n",(byte) sendBuf[i+25]));
-        }
-
-        textView2.append("\n");
-        for (int k=0; k<sendBufTest.length; k++) {
-            textView2.append("sendBufTest["+k+"] = "+String.format("%02X\n",sendBufTest[k]+"\n"));
         }
     }
 
