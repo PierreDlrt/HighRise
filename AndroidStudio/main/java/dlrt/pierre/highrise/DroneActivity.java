@@ -34,10 +34,11 @@ public class DroneActivity extends AppCompatActivity {
 
     int cpt=0;
     public static String IP_addr;
-    private short[] channels = {1500,1500,1500,1000,0,0,0,0,0,0,0,0,0,0,0,0}; // RC channels (id 0 ->15)
+    private char[] channels = {1500,1500,1500,1000,0,0,0,0,0,0,0,0,0,0,0,0}; // RC channels (id 0 ->15)
     private char[] keyMap = {127,0,0,0,0,0,0,0,0,0,0,0,0,0,0}; // my channels (id 0 -> 14)
     private char[] sendBuf = new char[40];
-    private char[] sendBufTest = {15, 127, 128, 136, 195, 255, 240, 170};
+    //private char[] sendBufTest = {15, 127, 128, 136, 195, 255, 240, 170};
+    private char[] sendBufTest = {1, 255, 0xAA55, 256, 0xCCCC, 0, 0xFFFF};
     private float[] mAxes = new float[AxesMapping.values().length];
 
     private WifiManager wifiManager;
@@ -78,13 +79,36 @@ public class DroneActivity extends AppCompatActivity {
                     if (mTcpClient != null) {
                         Log.d(TAG, "onClick: SendMessageTask created");
                         //new SendMessageTask().executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, keyMap);
+                        /*for(int i=0; i<sendBufTest.length; i++){
+                            if(sendBufTest[i]<255){
+
+                            }
+                        }*/
                         new SendMessageTask().executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, sendBufTest);
                         //sendBuf[0]++;
                         textView1.setText("");
+                        textView2.setText("");
                         for (int i=0; i<sendBufTest.length; i++){
                             textView1.append("sendBufTest = "+Integer.toBinaryString(sendBufTest[i])+"\n");
+                            /*textView1.append("sendBufTest = "+
+                                    ((sendBufTest[i] & 1 << 15) >> 15 ) + "" +
+                                    ((sendBufTest[i] & 1 << 14) >> 14 ) + "" +
+                                    ((sendBufTest[i] & 1 << 13) >> 13 ) + "" +
+                                    ((sendBufTest[i] & 1 << 12) >> 12 ) + "" +
+                                    ((sendBufTest[i] & 1 << 11) >> 11 ) + "" +
+                                    ((sendBufTest[i] & 1 << 10) >> 10 ) + "" +
+                                    ((sendBufTest[i] & 1 << 9) >> 9 ) + "" +
+                                    ((sendBufTest[i] & 1 << 8) >> 8 ) + "" +
+                                    ((sendBufTest[i] & 1 << 7) >> 7 ) + "" +
+                                    ((sendBufTest[i] & 1 << 6) >> 6 ) + "" +
+                                    ((sendBufTest[i] & 1 << 5) >> 5 ) + "" +
+                                    ((sendBufTest[i] & 1 << 4) >> 4 ) + "" +
+                                    ((sendBufTest[i] & 1 << 3) >> 3 ) + "" +
+                                    ((sendBufTest[i] & 1 << 2) >> 2 ) + "" +
+                                    ((sendBufTest[i] & 1 << 1) >> 1 ) + "" +
+                                    ((sendBufTest[i] & 1))+"\n");*/
+                            //textView2.append(Integer.toHexString(sendBufTest[i])+"\n");
                         }
-
                         //Log.d(TAG, "onClick: keymap="+Long.toHexString(keyMap));
                     }
                     //editText.setText("");
@@ -112,6 +136,7 @@ public class DroneActivity extends AppCompatActivity {
         }, null);
     }
 
+
     @Override
     public boolean dispatchGenericMotionEvent(MotionEvent ev) {
         // Log.d(TAG, "onGenericMotionEvent: " + ev);
@@ -124,6 +149,7 @@ public class DroneActivity extends AppCompatActivity {
             updateChannels();
             if (wifiManager.getConnectionInfo()!=null && mTcpClient != null) {
                 //new SendMessageTask().executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, sendBuf);
+                new SendMessageTask().executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, channels);
             }
             return true;
         }
@@ -157,16 +183,16 @@ public class DroneActivity extends AppCompatActivity {
 
         float CHANNEL_RANGE_MIN = 1000, CHANNEL_RANGE_MAX = 2000, CHANNEL_RANGE_CENTER = (CHANNEL_RANGE_MAX - CHANNEL_RANGE_MIN)/2;
 
-        channels[0] = (short) Math.round(map(mAxes[0], CHANNEL_RANGE_MIN, CHANNEL_RANGE_MAX));
-        channels[1] = (short) Math.round(map(mAxes[1], CHANNEL_RANGE_MIN, CHANNEL_RANGE_MAX));
-        channels[2] = (short) Math.round(map(mAxes[2], CHANNEL_RANGE_MIN, CHANNEL_RANGE_MAX));
-        channels[3] = (short) Math.round(map(mAxes[5], CHANNEL_RANGE_MIN, CHANNEL_RANGE_MAX));
+        channels[0] = (char) Math.round(map(mAxes[0], CHANNEL_RANGE_MIN, CHANNEL_RANGE_MAX));
+        channels[1] = (char) Math.round(map(mAxes[1], CHANNEL_RANGE_MIN, CHANNEL_RANGE_MAX));
+        channels[2] = (char) Math.round(map(mAxes[2], CHANNEL_RANGE_MIN, CHANNEL_RANGE_MAX));
+        channels[3] = (char) Math.round(map(mAxes[5], CHANNEL_RANGE_MIN, CHANNEL_RANGE_MAX));
 
         keyMap[0] = (char) Math.round(map(mAxes[3], 0, 255));
         keyMap[1] = (char) (mAxes[6]+1);
         keyMap[2] = (char) (mAxes[7]+1);
 
-        channelsToPackets();
+        //channelsToPackets();
     }
 
 
@@ -208,7 +234,7 @@ public class DroneActivity extends AppCompatActivity {
                     keyMap[getButton(keyCode)] = 0;
                     break;
             }
-            channelsToPackets();
+            //channelsToPackets();
             if (wifiManager.getConnectionInfo()!=null && mTcpClient != null) {
                 //new SendMessageTask().executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, sendBuf);
             }
