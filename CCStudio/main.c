@@ -50,8 +50,8 @@
 #define CHANNEL_RANGE_MIN       192
 #define CHANNEL_RANGE_MAX       1792
 #define CHANNEL_RANGE_CENTER    (CHANNEL_RANGE_MAX-CHANNEL_RANGE_MIN)/2
-#define NUM_MY_CHANNEL          15
-#define NUM_PACKET              25
+#define NUM_MY_CHANNEL          16
+#define NUM_FCU_CHANNEL         16
 
 #define PORT_NUM            5001
 #define BUF_SIZE            1000
@@ -747,12 +747,12 @@ int connectionManager() {
                                            g_cBsdRecvBuf[5],\
                                            g_cBsdRecvBuf[6],\
                                            g_cBsdRecvBuf[7]);*/
-                                cpt++;
+                                /*cpt++;
                                 UART_PRINT("packet %d\n\r", cpt);
                                 for (i=0; i<15; i++){
                                     UART_PRINT("g_cBsdRecvBuf[%d] = ", i);
                                     printdBinary(g_cBsdRecvBuf[i]);
-                                }
+                                }*/
 
                                 /*iStatus = sl_Send(iNewSockID, g_cBsdSendBuf, iTestBufLen, 0);*/
                             }
@@ -781,10 +781,10 @@ uint16_t mapValue(uint8_t val, int out_min, int out_max) {
 
 void CommandManager(void *pvParameters) {
 
-    static uint8_t packet[NUM_PACKET], myChannels[NUM_MY_CHANNEL]={0};
+    static uint16_t fcuChannels[NUM_FCU_CHANNEL]={0}, myChannels[NUM_MY_CHANNEL]={0};
     int i;
     TickType_t xLastWakeTime;
-    const TickType_t xFrequency = 500; // SBUS protocol sends every 14ms (analog mode) or 7ms (highspeed mode)
+    const TickType_t xFrequency = 300; // SBUS protocol sends every 14ms (analog mode) or 7ms (highspeed mode)
 
 
     /*MAP_UARTConfigSetExpClk(UARTA1_BASE,MAP_PRCMPeripheralClockGet(PRCM_UARTA1), \
@@ -798,29 +798,33 @@ void CommandManager(void *pvParameters) {
             /*
              * g_cBsdRecvBuf = [25 SBUS formatted packets, 15 channels containing key events]
              */
-            /*for (i=0; i<NUM_PACKET; i++){
-                packet[i] = g_cBsdRecvBuf[i];
+            for (i=0; i<NUM_FCU_CHANNEL; i++){
+                fcuChannels[i] = g_cBsdRecvBuf[i];
             }
             for (i=0; i<NUM_MY_CHANNEL; i++){
-                myChannels[i] = g_cBsdRecvBuf[i+NUM_PACKET];
-            }*/
+                myChannels[i] = g_cBsdRecvBuf[i+NUM_FCU_CHANNEL];
+            }
 
-            /*ClearTerm();
+            ClearTerm();
+            UART_PRINT("\33[%dA", 100); // Move terminal cursor up %d lines
             UART_PRINT("\n\r----------------------------\n\r");
-            UART_PRINT("\tSBUS PACKETS\n\r");
+            UART_PRINT("\tFCU CHANNELS\n\r");
             UART_PRINT("----------------------------\n\r");
-            for (i=0; i<NUM_PACKET; i++) {
+            for (i=0; i<NUM_FCU_CHANNEL; i++) {
                 //MAP_UARTCharPut(UARTA1_BASE, packet[i]);
-                UART_PRINT("packet[%d]: %02X\n\r", i, packet[i]);
+                UART_PRINT("fcuChannels[%d] = ", i);
+                printdBinary(fcuChannels[i]);
+                //UART_PRINT("fcuChannels[%d]: %02X\n\r", i, fcuChannels[i]);
             }
             UART_PRINT("\n\r----------------------------\n\r");
             UART_PRINT("\tMY CHANNELS\n\r");
             UART_PRINT("----------------------------\n\r");
             for (i=0; i<NUM_MY_CHANNEL; i++) {
                 //MAP_UARTCharPut(UARTA1_BASE, packet[i]);
-                UART_PRINT("myChannels[%d]: %02X\n\r", i, myChannels[i]);
+                UART_PRINT("myChannels[%d] = ", i);
+                printdBinary(myChannels[i]);
+                //UART_PRINT("myChannels[%d]: %02X\n\r", i, myChannels[i]);
             }
-            UART_PRINT("\33[%dA", 100); // Move terminal cursor up %d lines*/
         }
 
         vTaskDelayUntil( &xLastWakeTime, xFrequency );
@@ -928,13 +932,13 @@ void main()
         LOOP_FOREVER();
     }
 
-    /*lRetVal = osi_TaskCreate(CommandManager, \
+    lRetVal = osi_TaskCreate(CommandManager, \
                       (const signed char*)"Extract command from keymap", \
                       OSI_STACK_SIZE, (void*) pvParameters, tskIDLE_PRIORITY+2, &pCommandTaskHandle );
     if(lRetVal < 0){
         ERR_PRINT(lRetVal);
         LOOP_FOREVER();
-    }*/
+    }
     //
     // Start the task scheduler
     //
