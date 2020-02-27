@@ -641,7 +641,7 @@ int connectionManager() {
     int             iNewSockID;
     int             iTestBufLen;
     int             i;
-    int             cpt=0;
+    //int             cpt=0;
     //unsigned long   num;
 
     iTestBufLen  = BUF_SIZE;
@@ -783,9 +783,8 @@ void CommandManager(void *pvParameters) {
 
     static uint16_t fcuChannels[NUM_FCU_CHANNEL]={0}, myChannels[NUM_MY_CHANNEL]={0};
     int i;
-    TickType_t xLastWakeTime;
-    const TickType_t xFrequency = 300; // SBUS protocol sends every 14ms (analog mode) or 7ms (highspeed mode)
-
+    TickType_t xLastWakeTime, first, second;
+    const TickType_t xFrequency = 100; // SBUS protocol sends every 14ms (analog mode) or 7ms (highspeed mode)
 
     /*MAP_UARTConfigSetExpClk(UARTA1_BASE,MAP_PRCMPeripheralClockGet(PRCM_UARTA1), \
                     UART_BAUD_RATE_FCU, (UART_CONFIG_WLEN_8 | UART_CONFIG_STOP_TWO | \
@@ -801,33 +800,38 @@ void CommandManager(void *pvParameters) {
             for (i=0; i<NUM_FCU_CHANNEL; i++){
                 fcuChannels[i] = g_cBsdRecvBuf[i];
             }
+            first = xTaskGetTickCount()-xLastWakeTime;
+
             for (i=0; i<NUM_MY_CHANNEL; i++){
                 myChannels[i] = g_cBsdRecvBuf[i+NUM_FCU_CHANNEL];
             }
 
-            ClearTerm();
+            //ClearTerm();
             UART_PRINT("\33[%dA", 100); // Move terminal cursor up %d lines
-            UART_PRINT("\n\r----------------------------\n\r");
-            UART_PRINT("\tFCU CHANNELS\n\r");
-            UART_PRINT("----------------------------\n\r");
+            //UART_PRINT("\n\r----------------------------\n\r");
+            //UART_PRINT("\tFCU CHANNELS\n\r");
+            //UART_PRINT("----------------------------\n\r");
+            second = xTaskGetTickCount();
             for (i=0; i<NUM_FCU_CHANNEL; i++) {
                 //MAP_UARTCharPut(UARTA1_BASE, packet[i]);
-                UART_PRINT("fcuChannels[%d] = ", i);
-                printdBinary(fcuChannels[i]);
+                UART_PRINT("fcu[%d] = %d\n\r", i, fcuChannels[i]);
+                //printdBinary(fcuChannels[i]);
                 //UART_PRINT("fcuChannels[%d]: %02X\n\r", i, fcuChannels[i]);
             }
-            UART_PRINT("\n\r----------------------------\n\r");
-            UART_PRINT("\tMY CHANNELS\n\r");
-            UART_PRINT("----------------------------\n\r");
+
+            UART_PRINT("2:%d\n\r",xTaskGetTickCount()-second);
+            //UART_PRINT("\n\r----------------------------\n\r");
+            //UART_PRINT("\tMY CHANNELS\n\r");
+            //UART_PRINT("----------------------------\n\r");
             for (i=0; i<NUM_MY_CHANNEL; i++) {
                 //MAP_UARTCharPut(UARTA1_BASE, packet[i]);
-                UART_PRINT("myChannels[%d] = ", i);
-                printdBinary(myChannels[i]);
+                UART_PRINT("my[%d] = %d\n\r", i, myChannels[i]);
+                //printdBinary(myChannels[i]);
                 //UART_PRINT("myChannels[%d]: %02X\n\r", i, myChannels[i]);
             }
         }
-
-        vTaskDelayUntil( &xLastWakeTime, xFrequency );
+        UART_PRINT("Execution time : %d\n\r", xTaskGetTickCount()-xLastWakeTime);
+        vTaskDelayUntil( &xLastWakeTime, xFrequency);
     }
 }
 
