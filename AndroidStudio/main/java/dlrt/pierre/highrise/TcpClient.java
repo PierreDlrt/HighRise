@@ -8,6 +8,9 @@ import java.io.IOException;
 import java.net.InetAddress;
 import java.net.Socket;
 import java.io.InputStreamReader;
+import java.util.Calendar;
+
+import android.os.Handler;
 
 
 public class TcpClient {
@@ -17,12 +20,12 @@ public class TcpClient {
     private int mServerMessage;
     // sends message received notifications
     private OnMessageReceived mMessageListener = null;
-    // while this is true, the server will continue running
     public boolean mRun = false;
-    // used to send messages
     private DataOutputStream mBufferOut;
-    // used to read messages from the server
     private BufferedReader mBufferIn;
+
+    private Handler mHandler;
+    //private Runnable runnable;
 
     public TcpClient(OnMessageReceived listener) {
         mMessageListener = listener;
@@ -30,28 +33,20 @@ public class TcpClient {
 
 
     public void sendMessageByte(final char[] message) {
-        Runnable runnable = new Runnable() {
-            @Override
-            public void run() {
-                Log.d(TAG, "run: sendMessage running");
-                if (mBufferOut != null) {
-                    //Log.d(TAG, "Sending: " + message);
-                    try {
-                        byte[] b = new byte[message.length*2];
-                        for (int i=0; i<message.length; i++){
-                            b[2*i] = (byte) message[i];
-                            b[2*i+1] = (byte) (message[i] >> 8);
-                        }
-                        mBufferOut.write(b);
-                        mBufferOut.flush();
-                    } catch (IOException e) {
-                        e.printStackTrace();
-                    }
-                }
+        if (mBufferOut != null) {
+            byte[] b = new byte[message.length*2];
+            for (int i=0; i<message.length; i++){
+                b[2*i] = (byte) message[i];
+                b[2*i+1] = (byte) (message[i] >> 8);
             }
-        };
-        Thread thread = new Thread(runnable);
-        thread.start();
+            try {
+                mBufferOut.write(b);
+                mBufferOut.flush();
+            } catch (IOException e){
+                e.printStackTrace();
+            }
+            Log.d(TAG, "run: "+ Calendar.getInstance().getTime());
+        }
     }
 
 
@@ -78,6 +73,7 @@ public class TcpClient {
 
     public void run() {
 
+        mHandler = new Handler();
         mRun = true;
         SERVER_IP = DroneActivity.IP_addr;
         //Integer.toString( //wifiManager.getConnectionInfo().getIpAddress());
@@ -90,13 +86,9 @@ public class TcpClient {
             //create a socket to make the connection with the server
             Socket socket = new Socket(serverAddr, SERVER_PORT);
             try {
-
-                Log.d(TAG, "run: socket created");
-                //sends the message to the server
                 mBufferOut = new DataOutputStream(socket.getOutputStream());
-                //receives the message which the server sends back
                 mBufferIn = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-                //in this while the client listens for the messages sent by the server
+
                 while (mRun) {
                     //Log.d(TAG, "run: entered mRun");
                     if(mBufferIn.ready()) {
