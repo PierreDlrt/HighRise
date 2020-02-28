@@ -25,7 +25,6 @@ public class TcpClient {
     private BufferedReader mBufferIn;
 
     private Handler mHandler;
-    //private Runnable runnable;
 
     public TcpClient(OnMessageReceived listener) {
         mMessageListener = listener;
@@ -45,7 +44,7 @@ public class TcpClient {
             } catch (IOException e){
                 e.printStackTrace();
             }
-            Log.d(TAG, "run: "+ Calendar.getInstance().getTime());
+            //Log.d(TAG, "run: "+ Calendar.getInstance().getTime());
         }
     }
 

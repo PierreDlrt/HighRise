@@ -26,18 +26,15 @@ public class MainActivity extends AppCompatActivity {
 
         wifiManager = (WifiManager) getApplicationContext().getSystemService(Context.WIFI_SERVICE);
 
-        buttonStart.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
+        buttonStart.setOnClickListener(view -> {
 
-                if (!wifiManager.isWifiEnabled()) {
-                    Toast.makeText(getApplicationContext(), "Turning WiFi ON...", Toast.LENGTH_LONG).show();
-                    wifiManager.setWifiEnabled(true);
-                }
-
-                Intent myIntent = new Intent(getApplicationContext(), DroneActivity.class);
-                getApplication().startActivity(myIntent);
+            if (!wifiManager.isWifiEnabled()) {
+                Toast.makeText(getApplicationContext(), "Turning WiFi ON...", Toast.LENGTH_LONG).show();
+                wifiManager.setWifiEnabled(true);
             }
+
+            Intent myIntent = new Intent(getApplicationContext(), DroneActivity.class);
+            getApplication().startActivity(myIntent);
         });
     }
 }

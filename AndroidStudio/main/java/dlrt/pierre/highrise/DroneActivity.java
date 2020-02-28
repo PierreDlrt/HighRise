@@ -17,6 +17,7 @@ import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.View;
 import android.widget.Button;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -28,6 +29,7 @@ public class DroneActivity extends AppCompatActivity {
     TcpClient mTcpClient;
     TextView textView1, textView2, textView3;
     LinearLayout myLayout;
+    ImageView isConnected;
 
     int cpt=0;
     public static String IP_addr;
@@ -36,7 +38,7 @@ public class DroneActivity extends AppCompatActivity {
     //private char[] sendBufTest = {15, 127, 128, 136, 195, 255, 240, 170};
     private char[] sendBufTest = {1, 255, 0xAA55, 256, 0xCCCC, 0, 0xFFFF};
     private float[] mAxes = new float[AxesMapping.values().length];
-    public boolean gamePadConnected = true;
+    public boolean gamePadConnected = false;
 
     private WifiManager wifiManager;
     WifiReceiver receiverWifi;
@@ -55,6 +57,7 @@ public class DroneActivity extends AppCompatActivity {
         textView2 = findViewById(R.id.textView2);
         textView3 = findViewById(R.id.textView3);
         myLayout =  findViewById(R.id.my_layout);
+        isConnected = findViewById(R.id.isConnected);
 
         myLayout.requestFocus();
         wifiManager = (WifiManager) getApplicationContext().getSystemService(Context.WIFI_SERVICE);
@@ -65,27 +68,30 @@ public class DroneActivity extends AppCompatActivity {
 
         mInputManager = (InputManager) getSystemService(Context.INPUT_SERVICE);
 
+        for(int i : mInputManager.getInputDeviceIds()){
+            if((mInputManager.getInputDevice(i).getSources() & InputDevice.SOURCE_GAMEPAD)!=0){
+                gamePadConnected = true;
+            }
+        }
+
         if (!wifiManager.isWifiEnabled()) {
             Toast.makeText(getApplicationContext(), "Turning WiFi ON...", Toast.LENGTH_LONG).show();
             wifiManager.setWifiEnabled(true);
         }
 
-        btnSend.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                if (wifiManager.getConnectionInfo()!=null) {
-                    if (mTcpClient != null) {
-                        Log.d(TAG, "onClick: SendMessageTask created");
-                        //new SendMessageTask().executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, sendBufTest);
-                        /*textView1.setText("");
-                        textView2.setText("");
-                        for (int i=0; i<sendBufTest.length; i++){
-                            textView1.append("sendBufTest = "+Integer.toBinaryString(sendBufTest[i])+"\n");
-                        }*/
-                    }
-                } else {
-                    Toast.makeText(getApplicationContext(),"No connected device", Toast.LENGTH_SHORT).show();
+        btnSend.setOnClickListener(view -> {
+            if (wifiManager.getConnectionInfo()!=null) {
+                if (mTcpClient != null) {
+                    Log.d(TAG, "onClick: SendMessageTask created");
+                    //new SendMessageTask().executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, sendBufTest);
+                    /*textView1.setText("");
+                    textView2.setText("");
+                    for (int i=0; i<sendBufTest.length; i++){
+                        textView1.append("sendBufTest = "+Integer.toBinaryString(sendBufTest[i])+"\n");
+                    }*/
                 }
+            } else {
+                Toast.makeText(getApplicationContext(),"No connected device", Toast.LENGTH_SHORT).show();
             }
         });
 
@@ -93,20 +99,23 @@ public class DroneActivity extends AppCompatActivity {
             @Override
             public void onInputDeviceAdded(int i) {
                 Log.d(TAG, "onInputDeviceAdded: "+mInputManager.getInputDevice(i));
-                /*if((mInputManager.getInputDevice(i).getSources() & InputDevice.SOURCE_GAMEPAD)!=0) {
+                if((mInputManager.getInputDevice(i).getSources() & InputDevice.SOURCE_GAMEPAD)!=0) {
                     gamePadConnected = true;
                     if (mTcpClient != null && mTcpClient.mRun && sendMessageTask.getStatus() == AsyncTask.Status.PENDING) {
                         sendMessageTask.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
                     }
-                }*/
+                }
             }
 
             @Override
             public void onInputDeviceRemoved(int i) {
                 Log.d(TAG, "onInputDeviceRemoved: "+mInputManager.getInputDevice(i));
-                /*if((mInputManager.getInputDevice(i).getSources() & InputDevice.SOURCE_GAMEPAD)!=0) {
-                    //gamePadConnected = false;
-                }*/
+                for(int j : mInputManager.getInputDeviceIds()){
+                    if((mInputManager.getInputDevice(j).getSources() & InputDevice.SOURCE_GAMEPAD)!=0){
+                        gamePadConnected = false;
+                    }
+                    //textView3.append(j+" ");
+                }
             }
 
             @Override
@@ -130,10 +139,11 @@ public class DroneActivity extends AppCompatActivity {
             textView2.setText("");
             for (int i=0; i<=15; i++){
                 textView1.append("fcuChannels["+i+"] = "+(short) channels[i]+"\n");
+                textView2.append("fcuChannels["+i+"] = "+Integer.toBinaryString(channels[i])+"\n");
             }
-            for (int i=16; i<=31; i++){
+            /*for (int i=16; i<=31; i++){
                 textView2.append("myChannels["+(i-16)+"] = "+(short) channels[i]+"\n");
-            }
+            }*/
             if (wifiManager.getConnectionInfo()!=null && mTcpClient != null) {
                 //new SendMessageTask().executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, sendBuf);
                 //new SendMessageTask().executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, channels);
@@ -203,6 +213,16 @@ public class DroneActivity extends AppCompatActivity {
         }
     }
 
+    @Override
+    public boolean onKeyUp(int keyCode, KeyEvent event) {
+        return super.onKeyUp(keyCode, event);
+    }
+
+    @Override
+    public boolean onKeyDown(int keyCode, KeyEvent event) {
+        return super.onKeyUp(keyCode, event);
+    }
+
 
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
@@ -216,21 +236,23 @@ public class DroneActivity extends AppCompatActivity {
                 case KeyEvent.ACTION_DOWN:
                     //textView2.setText("up "+keyCode);
                     channels[getButton(keyCode)] = 1;
+                    //super.onKeyDown(keyCode, event);
                     break;
                 case KeyEvent.ACTION_UP:
                     //textView1.setText("down "+keyCode);
                     channels[getButton(keyCode)] = 0;
+                    //super.onKeyUp(keyCode, event);
                     break;
             }
             //channelsToPackets();
             textView1.setText("");
-            textView2.setText("");
+            //textView2.setText("");
             for (int i=0; i<=15; i++){
                 textView1.append("fcuChannels["+i+"] = "+(short) channels[i]+"\n");
             }
-            for (int i=16; i<=31; i++){
+            /*for (int i=16; i<=31; i++){
                 textView2.append("myChannels["+(i-16)+"] = "+(short) channels[i]+"\n");
-            }
+            }*/
             if (wifiManager.getConnectionInfo()!=null && mTcpClient != null) {
                 //new SendMessageTask().executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, sendBuf);
             }
@@ -240,32 +262,19 @@ public class DroneActivity extends AppCompatActivity {
 
     private int getButton(int keyCode) {
         switch (keyCode) {
-            case KeyEvent.KEYCODE_BUTTON_A: // Square
-                return 20;
-            case KeyEvent.KEYCODE_BUTTON_B: // Cross
-                return 21;
-            case KeyEvent.KEYCODE_BUTTON_C: // Circle
-                return 22;
-            case KeyEvent.KEYCODE_BUTTON_X: // Triangle
-                return 23;
-            case KeyEvent.KEYCODE_BUTTON_Y: // L1
-                return 24;
-            case KeyEvent.KEYCODE_BUTTON_Z: // R1
-                return 25;
-            case KeyEvent.KEYCODE_BUTTON_L1: // L2
-                return 26;
-            case KeyEvent.KEYCODE_BUTTON_R1: // R2
-                return 27;
-            case KeyEvent.KEYCODE_BUTTON_SELECT: // L3
-                return 28;
-            case KeyEvent.KEYCODE_BUTTON_L2: // Share
-                return 29;
-            case KeyEvent.KEYCODE_BUTTON_R2: // Option
-                return 30;
-            case KeyEvent.KEYCODE_BUTTON_THUMBL: // Big central button
-                return 31;
-            default:
-                return -1;
+            case KeyEvent.KEYCODE_BUTTON_A:         return 20; // Square
+            case KeyEvent.KEYCODE_BUTTON_B:         return 21; // Cross
+            case KeyEvent.KEYCODE_BUTTON_C:         return 22; // Circle
+            case KeyEvent.KEYCODE_BUTTON_X:         return 23; // Triangle
+            case KeyEvent.KEYCODE_BUTTON_Y:         return 24; // L1
+            case KeyEvent.KEYCODE_BUTTON_Z:         return 25; // R1
+            case KeyEvent.KEYCODE_BUTTON_L1:        return 26; // L2
+            case KeyEvent.KEYCODE_BUTTON_R1:        return 27; // R2
+            case KeyEvent.KEYCODE_BUTTON_SELECT:    return 28; // L3
+            case KeyEvent.KEYCODE_BUTTON_L2:        return 29; // Share
+            case KeyEvent.KEYCODE_BUTTON_R2:        return 30; // Option
+            case KeyEvent.KEYCODE_BUTTON_THUMBL:    return 31; // Big central button
+            default:                                return -1;
         }
     }
 
@@ -280,13 +289,15 @@ public class DroneActivity extends AppCompatActivity {
                 //textView3.setText(params[0][0]);
                 //cpt++;
                 //textView3.setText(cpt+" messages sent\nchannels[0]= "+channels[0]);
-                //while (!gamePadConnected);
+
                 try {
                     Thread.sleep(100);
                 } catch (InterruptedException e) {
                     e.printStackTrace();
                 }
-                mTcpClient.sendMessageByte(channels);
+                if (gamePadConnected) {
+                    mTcpClient.sendMessageByte(channels);
+                }
                 //return null;
             }
         }
@@ -296,16 +307,15 @@ public class DroneActivity extends AppCompatActivity {
     public class ConnectTask extends AsyncTask<Integer, Integer, TcpClient> {
         @Override
         protected TcpClient doInBackground(Integer... message) {
-            mTcpClient = new TcpClient(new TcpClient.OnMessageReceived() {
-                @Override
-                public void messageReceived(int message) {
-                    //this method calls the onProgressUpdate
-                    //publishProgress(message);
-                    Log.d(TAG, "messageReceived: AsyncTask launched");
-                }
+            mTcpClient = new TcpClient(message1 -> {
+                //this method calls the onProgressUpdate
+                //publishProgress(message);
+                Log.d(TAG, "messageReceived: AsyncTask launched");
             });
             while(true){
-                while(wifiManager.getConnectionInfo()==null);
+                while(!receiverWifi.networkInfo.isConnected());
+                Log.d(TAG, "doInBackground: running connect task");
+                isConnected.setImageDrawable(getResources().getDrawable(R.drawable.circle_green));
                 mTcpClient.run();
             }
         }
@@ -325,6 +335,7 @@ public class DroneActivity extends AppCompatActivity {
 
         private static final String TAG = "WifiReceiver";
         public String IP_ADDR;
+        public NetworkInfo networkInfo;
 
         //WifiManager wifiManager;
 
@@ -338,12 +349,13 @@ public class DroneActivity extends AppCompatActivity {
             //String action = intent.getAction();
 
             //if (WifiManager.NETWORK_STATE_CHANGED_ACTION.equals(action)) {
-            NetworkInfo networkInfo = intent.getParcelableExtra(WifiManager.EXTRA_NETWORK_INFO);
+            networkInfo = intent.getParcelableExtra(WifiManager.EXTRA_NETWORK_INFO);
+            //Log.d(TAG, "onReceive: "+networkInfo);
             if (networkInfo.isConnected()) {
                 IP_addr = Formatter.formatIpAddress(wifiManager.getDhcpInfo().serverAddress);
                 if(mTcpClient==null){
                     connectTask.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
-                    if(sendMessageTask.getStatus() == AsyncTask.Status.PENDING){
+                    if(gamePadConnected && sendMessageTask.getStatus() == AsyncTask.Status.PENDING){
                         while (mTcpClient==null);
                         while (!mTcpClient.mRun);
                         sendMessageTask.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
@@ -351,6 +363,8 @@ public class DroneActivity extends AppCompatActivity {
                 }
             } else {
                 if (mTcpClient!=null){
+                    Log.d(TAG, "onReceive: client non nul");
+                    isConnected.setImageDrawable(getResources().getDrawable(R.drawable.circle_red));
                     mTcpClient.stopClient();
                 }
             }
