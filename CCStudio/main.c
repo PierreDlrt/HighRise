@@ -52,7 +52,7 @@
 #define SBUS_SIZE               25
 
 #define PORT_NUM            5001
-#define BUF_SIZE            1000
+#define BUF_SIZE            960
 #define TCP_PACKET_COUNT    50
 
 // Application specific status/error codes
@@ -89,6 +89,8 @@ unsigned long  g_ulPingPacketsRecv = 0;
 unsigned long  g_uiGatewayIP = 0;
 unsigned char g_cBsdSendBuf[BUF_SIZE];
 uint16_t g_cBsdRecvBuf[BUF_SIZE]= {0};
+int pccount;
+
 
 
 OsiMsgQ_t msgQfb = NULL;
@@ -565,7 +567,7 @@ void TCPServerTask( void *pvParameters ){
         LOOP_FOREVER();
     }
 
-    while(1){
+    for(;;){
         //UART_PRINT("Task 1 start\n\r");
         connectionManager();
     }
@@ -583,6 +585,9 @@ int connectionManager() {
     int             iNewSockID;
     int             iTestBufLen;
     int             i;
+    TickType_t      recv1 = xTaskGetTickCount();//, recv2 = xTaskGetTickCount();
+    static TickType_t xLastWakeTime;
+    static const TickType_t xFrequency = 20;
     //int             cpt=0;
     //unsigned long   num;
 
@@ -661,6 +666,9 @@ int connectionManager() {
                         // waits for 1000 packets from the connected TCP client
                         UART_PRINT("Waiting for incoming message...\n\r");
                         while (1) {
+                            xLastWakeTime = xTaskGetTickCount();
+                            UART_PRINT("T1\n\r");
+                            //UART_PRINT("1:%d\n\r",xTaskGetTickCount());
                             //UART_PRINT("Task 1 execute\n\r");
                             if(!IS_IP_LEASED(g_ulStatus)) {
                                 UART_PRINT("Connect a client to device...\n\r");
@@ -668,18 +676,32 @@ int connectionManager() {
                                 sl_Close(iSockID);
                                 return -1;
                             }
+
+                            //recv1 = xTaskGetTickCount();
+                            //UART_PRINT("Recv: %d\n\r", recv1 - recv2);
+                            //recv2 = xTaskGetTickCount();
+                            //UART_PRINT("recv\n\r");
+                            UART_PRINT("recv\n\r");
                             iStatus = sl_Recv(iNewSockID, g_cBsdRecvBuf, iTestBufLen, 0);
+                            //UART_PRINT("[0]=%d\n\r", g_cBsdRecvBuf[0]);
                             if (iStatus == SL_EAGAIN) {
-                                //MAP_UtilsDelay(10000);
+                                //UART_PRINT("2:%d\n\r",xTaskGetTickCount());
+                                //vTaskDelayUntil( &xLastWakeTime, xFrequency);
                             }
                             else if (iStatus > 0) {
-                                /*iStatus = sl_Send(iNewSockID, g_cBsdSendBuf, iTestBufLen, 0);*/
+                                pccount = xTaskGetTickCount() - recv1;
+                                recv1 = xTaskGetTickCount();
+                                //UART_PRINT("3:%d\n\r",xTaskGetTickCount());
+                                //UART_PRINT("PC:%d\n\r", iStatus);
+                                //pccount = iStatus;
                             }
                             else {
                                 sl_Close(iNewSockID);
                                 sl_Close(iSockID);
                                 break;
                             }
+                            UART_PRINT("end T1\n\r");
+                            vTaskDelayUntil( &xLastWakeTime, xFrequency);
                         }
                     }
                 }
@@ -700,27 +722,29 @@ uint16_t mapValue(uint8_t val, int out_min, int out_max) {
 
 void CommandManagerTask(void *pvParameters) {
 
-    static uint16_t fcuChannels[NUM_FCU_CHANNEL]={0}, myChannels[NUM_MY_CHANNEL]={0};
-    uint8_t sbusBytes[SBUS_SIZE]={0};
+    //static uint16_t fcuChannels[NUM_FCU_CHANNEL]={0}, myChannels[NUM_MY_CHANNEL]={0};
+    static uint8_t sbusBytes[SBUS_SIZE]={0};
     int i;
-    static TickType_t xLastWakeTime; //, first, second;
-    static const TickType_t xFrequency = 500; // SBUS protocol sends every 14ms (analog mode) or 7ms (highspeed mode)
+    static TickType_t xLastWakeTime, endWhile; //, first, second;
+    static const TickType_t xFrequency = 20; // SBUS protocol sends every 14ms (analog mode) or 7ms (highspeed mode)
+    static uint16_t fcuChannels[NUM_FCU_CHANNEL]={0}, myChannels[NUM_MY_CHANNEL]={0};
 
-    /*MAP_UARTConfigSetExpClk(UARTA1_BASE,MAP_PRCMPeripheralClockGet(PRCM_UARTA1), \
-                    UART_BAUD_RATE_FCU, (UART_CONFIG_WLEN_8 | UART_CONFIG_STOP_TWO | \
-                    UART_CONFIG_PAR_EVEN));*/
-
-    while(1){
+    for(;;){
+        UART_PRINT("T2\n\r");
         xLastWakeTime = xTaskGetTickCount();
+        //UART_PRINT("4:%d\n\r",xTaskGetTickCount());
         if(IS_IP_LEASED(g_ulStatus)){
 
             /*
             * g_cBsdRecvBuf = [25 SBUS formatted packets, 15 channels containing key events]
             */
+
             for (i=0; i<NUM_FCU_CHANNEL; i++){
                 fcuChannels[i] = g_cBsdRecvBuf[i];
+                //UART_PRINT("\33[%dA", 40);
+                //UART_PRINT("%02X\n\r", fcuChannels[i]);
+                //UART_PRINT("%d\n\r",fcuChannels[i]);
             }
-            //first = xTaskGetTickCount()-xLastWakeTime;
 
             for (i=0; i<NUM_MY_CHANNEL; i++){
                 myChannels[i] = g_cBsdRecvBuf[i+NUM_FCU_CHANNEL];
@@ -752,17 +776,25 @@ void CommandManagerTask(void *pvParameters) {
             sbusBytes[23] = 0x00;
             sbusBytes[24] = _sbusFooter;
 
-            ClearTerm();
-            UART_PRINT("\33[%dA", 100); // Move terminal cursor up %d lines
-
+            //ClearTerm();
+            //UART_PRINT("\33[%dA", 30); // Move terminal cursor up %d lines
+            //UART_PRINT("5:%d\n\r",xTaskGetTickCount());
             for (i=0; i<SBUS_SIZE; i++) {
-                //MAP_UARTCharPut(UARTA1_BASE, packet[i]);
-                UART_PRINT("sbus[%d]=", i);
-                printBinary(sbusBytes[i]);
+                //MAP_UARTCharPut(UARTA0_BASE, sbusBytes[i]);//sbusBytes[i]);
+                //MAP_UARTCharPut(UARTA0_BASE, '\n'
+                //Message("test\n\r");
+                UART_PRINT("%02X ", sbusBytes[i]);
+                //printBinary(sbusBytes[i]);
                 //UART_PRINT("fcuChannels[%d]: %02X\n\r", i, fcuChannels[i]);
             }
+            endWhile = xTaskGetTickCount()-xLastWakeTime;
+            UART_PRINT("| %d | %d\n\r", pccount, endWhile);
+            //MAP_UARTCharPut(UARTA1_BASE, 'a');
+            //MAP_UARTCharPut(UARTA1_BASE, '\n');
         }
-        UART_PRINT("Execution time : %d\n\r", xTaskGetTickCount()-xLastWakeTime);
+        //UART_PRINT("6:%d\n\r",xTaskGetTickCount());
+        //UART_PRINT("T2 time : %d\n\r", endWhile);
+        UART_PRINT("end T2\n\r");
         vTaskDelayUntil( &xLastWakeTime, xFrequency);
     }
 }
@@ -813,8 +845,16 @@ void main() {
     PinMuxConfig();
 
 #ifndef NOTERM
-    InitTerm();
+    //InitTerm();
 #endif
+
+    MAP_UARTConfigSetExpClk(CONSOLE,MAP_PRCMPeripheralClockGet(CONSOLE_PERIPH),
+                         UART_BAUD_RATE, (UART_CONFIG_WLEN_8 | UART_CONFIG_STOP_ONE |
+                         UART_CONFIG_PAR_NONE));
+
+    MAP_UARTConfigSetExpClk(UARTA1_BASE, MAP_PRCMPeripheralClockGet(PRCM_UARTA1),
+                          UART_BAUD_RATE_FCU, (UART_CONFIG_WLEN_8 | UART_CONFIG_STOP_TWO | // UART_CONFIG_STOP_TWO
+                          UART_CONFIG_PAR_EVEN)); //UART_BAUD_RATE_FCU // UART_CONFIG_PAR_EVEN
 
     //UART_PRINT("Enter main\n\r");
 
@@ -856,7 +896,7 @@ void main() {
     //
 
     lRetVal = osi_TaskCreate(TCPServerTask, \
-                      (const signed char*)"wireless LAN in AP mode", \
+                      (const signed char*)"Wireless LAN in AP mode", \
                       OSI_STACK_SIZE, (void*) pvParameters, tskIDLE_PRIORITY+1, &pServerHandle );
     if(lRetVal < 0){
         ERR_PRINT(lRetVal);
@@ -872,8 +912,8 @@ void main() {
     }
 
     /*lRetVal = osi_TaskCreate(DroneStatusFeedBack, \
-                          (const signed char*)"Send drone state", \
-                          OSI_STACK_SIZE, (void*) pvParameters, tskIDLE_PRIORITY+2, &pCommandTaskHandle );
+                          (const signed char*)"Send drone state summary", \
+                          OSI_STACK_SIZE, (void*) pvParameters, tskIDLE_PRIORITY+2, &pDroneStatusFB );
     if(lRetVal < 0){
         ERR_PRINT(lRetVal);
         LOOP_FOREVER();
