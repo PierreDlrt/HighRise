@@ -22,6 +22,8 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import java.util.Calendar;
+
 public class DroneActivity extends AppCompatActivity {
 
     public static final String TAG = DroneActivity.class.getSimpleName();
@@ -33,10 +35,9 @@ public class DroneActivity extends AppCompatActivity {
 
     int cpt=0;
     public static String IP_addr;
-    private char[] channels = {1500,1500,1500,1000,0,0,0,0,0,0,0,0,0,0,0,0, // RC channels (id 0 ->15)
+    private char[] channels = {1500,1500,1500,1000,1234,0,0,0,0,0,0,0,0,0,0,0, // RC channels (id 0 ->15)
                             1000,1500,0,0,0,0,0,0,0,0,0,0,0,0,0,0}; // my channels (id 16 -> 31)
-    //private char[] sendBufTest = {15, 127, 128, 136, 195, 255, 240, 170};
-    private char[] sendBufTest = {1, 255, 0xAA55, 256, 0xCCCC, 0, 0xFFFF};
+    char[] sendBuf = new char[25];
     private float[] mAxes = new float[AxesMapping.values().length];
     public boolean gamePadConnected = false;
 
@@ -80,6 +81,7 @@ public class DroneActivity extends AppCompatActivity {
         }
 
         btnSend.setOnClickListener(view -> {
+            channelsToSBUS();
             if (wifiManager.getConnectionInfo()!=null) {
                 if (mTcpClient != null) {
                     Log.d(TAG, "onClick: SendMessageTask created");
@@ -139,8 +141,10 @@ public class DroneActivity extends AppCompatActivity {
             textView2.setText("");
             for (int i=0; i<=15; i++){
                 textView1.append("fcuChannels["+i+"] = "+(short) channels[i]+"\n");
-                textView2.append("fcuChannels["+i+"] = "+Integer.toBinaryString(channels[i])+"\n");
+                //textView2.append("["+i+"] = "+Integer.toBinaryString(channels[i])+"\n");
             }
+            //textView2.setText(channelsToSBUS());
+            channelsToSBUS();
             /*for (int i=16; i<=31; i++){
                 textView2.append("myChannels["+(i-16)+"] = "+(short) channels[i]+"\n");
             }*/
@@ -151,6 +155,40 @@ public class DroneActivity extends AppCompatActivity {
             return true;
         }
         return super.dispatchGenericMotionEvent(ev);
+    }
+
+    void channelsToSBUS(){
+
+        sendBuf[0] = 0x0F;
+        sendBuf[1] = (char) ((channels[0] & 0x07FF));
+        sendBuf[2] = (char) ((channels[0] & 0x07FF)>>8 | (channels[1] & 0x07FF)<<3);
+        sendBuf[3] = (char) ((channels[1] & 0x07FF)>>5 | (channels[2] & 0x07FF)<<6);
+        sendBuf[4] = (char) ((channels[2] & 0x07FF)>>2);
+        sendBuf[5] = (char) ((channels[2] & 0x07FF)>>10 | (channels[3] & 0x07FF)<<1);
+        sendBuf[6] = (char) ((channels[3] & 0x07FF)>>7 | (channels[4] & 0x07FF)<<4);
+        sendBuf[7] = (char) ((channels[4] & 0x07FF)>>4 | (channels[5] & 0x07FF)<<7);
+        sendBuf[8] = (char) ((channels[5] & 0x07FF)>>1);
+        sendBuf[9] = (char) ((channels[5] & 0x07FF)>>9 | (channels[6] & 0x07FF)<<2);
+        sendBuf[10] = (char) ((channels[6] & 0x07FF)>>6 | (channels[7] & 0x07FF)<<5);
+        sendBuf[11] = (char) ((channels[7] & 0x07FF)>>3);
+        sendBuf[12] = (char) ((channels[8] & 0x07FF));
+        sendBuf[13] = (char) ((channels[8] & 0x07FF)>>8 | (channels[9] & 0x07FF)<<3);
+        sendBuf[14] = (char) ((channels[9] & 0x07FF)>>5 | (channels[10] & 0x07FF)<<6);
+        sendBuf[15] = (char) ((channels[10] & 0x07FF)>>2);
+        sendBuf[16] = (char) ((channels[10] & 0x07FF)>>10 | (channels[11] & 0x07FF)<<1);
+        sendBuf[17] = (char) ((channels[11] & 0x07FF)>>7 | (channels[12] & 0x07FF)<<4);
+        sendBuf[18] = (char) ((channels[12] & 0x07FF)>>4 | (channels[13] & 0x07FF)<<7);
+        sendBuf[19] = (char) ((channels[13] & 0x07FF)>>1);
+        sendBuf[20] = (char) ((channels[13] & 0x07FF)>>9 | (channels[14] & 0x07FF)<<2);
+        sendBuf[21] = (char) ((channels[14] & 0x07FF)>>6 | (channels[15] & 0x07FF)<<5);
+        sendBuf[22] = (char) ((channels[15] & 0x07FF)>>3);
+        sendBuf[23] = 0x00;
+        sendBuf[24] = 0x00;
+
+        textView2.setText("");
+        for (int k=0; k<sendBuf.length; k++) {
+            textView2.append("packet["+k+"] = "+String.format("%02X\n",(byte) sendBuf[k]));
+        }
     }
 
 
@@ -286,19 +324,16 @@ public class DroneActivity extends AppCompatActivity {
         protected Void doInBackground(Void... voids) {
             Log.d(TAG, "SendMessageTask: executing");
             while (true) {
-                //textView3.setText(params[0][0]);
-                //cpt++;
-                //textView3.setText(cpt+" messages sent\nchannels[0]= "+channels[0]);
-
                 try {
-                    Thread.sleep(100);
+                    Thread.sleep(50);
+                    Log.d(TAG, "doInBackground: "+ Calendar.getInstance().getTime());
                 } catch (InterruptedException e) {
                     e.printStackTrace();
                 }
                 if (gamePadConnected) {
-                    mTcpClient.sendMessageByte(channels);
+                    //mTcpClient.sendMessageByte(channels);
                 }
-                //return null;
+                mTcpClient.sendMessageByte(channels);
             }
         }
     }
@@ -363,7 +398,6 @@ public class DroneActivity extends AppCompatActivity {
                 }
             } else {
                 if (mTcpClient!=null){
-                    Log.d(TAG, "onReceive: client non nul");
                     isConnected.setImageDrawable(getResources().getDrawable(R.drawable.circle_red));
                     mTcpClient.stopClient();
                 }

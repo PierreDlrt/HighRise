@@ -37,6 +37,8 @@ public class TcpClient {
             for (int i=0; i<message.length; i++){
                 b[2*i] = (byte) message[i];
                 b[2*i+1] = (byte) (message[i] >> 8);
+                //Log.d(TAG, "sendMessageByte "+i+": "+(int) message[i]);
+                //Log.d(TAG, "sendMessageByte: "+message.length);
             }
             try {
                 mBufferOut.write(b);
