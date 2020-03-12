@@ -86,6 +86,9 @@ public class TcpClient {
             Log.d("TCP Client", "C: Connecting...");
             //create a socket to make the connection with the server
             Socket socket = new Socket(serverAddr, SERVER_PORT);
+            socket.setTcpNoDelay(true);
+            //Log.d(TAG, "run: delay :"+socket.getTcpNoDelay());
+            //Log.d(TAG, "run: send buf size: "+socket.getSendBufferSize());
             try {
                 mBufferOut = new DataOutputStream(socket.getOutputStream());
                 mBufferIn = new BufferedReader(new InputStreamReader(socket.getInputStream()));

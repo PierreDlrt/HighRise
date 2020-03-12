@@ -35,8 +35,8 @@ public class DroneActivity extends AppCompatActivity {
 
     int cpt=0;
     public static String IP_addr;
-    private char[] channels = {1500,1500,1500,1000,1234,0,0,0,0,0,0,0,0,0,0,0, // RC channels (id 0 ->15)
-                            1000,1500,0,0,0,0,0,0,0,0,0,0,0,0,0,0}; // my channels (id 16 -> 31)
+    private char[] channels = {992,992,992,192,0,0,0,0,0,0,0,0,0,0,0,0, // RC channels (id 0 ->15)
+                            192,1792,0,0,0,0,0,0,0,0,0,0,0,0,0,0}; // my channels (id 16 -> 31)
     char[] sendBuf = new char[25];
     private float[] mAxes = new float[AxesMapping.values().length];
     public boolean gamePadConnected = false;
@@ -198,7 +198,7 @@ public class DroneActivity extends AppCompatActivity {
 
     private void updateChannels() {
 
-        float CHANNEL_RANGE_MIN = 1000, CHANNEL_RANGE_MAX = 2000, CHANNEL_RANGE_CENTER = (CHANNEL_RANGE_MAX - CHANNEL_RANGE_MIN)/2;
+        float CHANNEL_RANGE_MIN = 192, CHANNEL_RANGE_MAX = 1792, CHANNEL_RANGE_CENTER = (CHANNEL_RANGE_MAX - CHANNEL_RANGE_MIN)/2;
 
         channels[0] = (char) Math.round(map(mAxes[0], CHANNEL_RANGE_MIN, CHANNEL_RANGE_MAX));
         channels[1] = (char) Math.round(map(mAxes[1], CHANNEL_RANGE_MIN, CHANNEL_RANGE_MAX));
@@ -326,14 +326,15 @@ public class DroneActivity extends AppCompatActivity {
             while (true) {
                 try {
                     Thread.sleep(50);
-                    Log.d(TAG, "doInBackground: "+ Calendar.getInstance().getTime());
+                    //Log.d(TAG, "doInBackground: "+ Calendar.getInstance().getTime());
                 } catch (InterruptedException e) {
                     e.printStackTrace();
+                } finally {
+                    mTcpClient.sendMessageByte(channels);
                 }
                 if (gamePadConnected) {
                     //mTcpClient.sendMessageByte(channels);
                 }
-                mTcpClient.sendMessageByte(channels);
             }
         }
     }
