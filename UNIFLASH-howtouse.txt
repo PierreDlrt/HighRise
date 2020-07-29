@@ -6,6 +6,8 @@ pierre.dlrt@outlook.fr
 
 Uniflash is used to write code and configuration files into flash to be executed by boot sequence (generally upon reset)
 
+(Board used: CC3200-LAUNCHXL)
+
 \\\\\\\\\\\\\ Procedure ////////////
 
 - Configure jumpers J6 J7 to FLASH position and J15 to position SOP2 (100 FLASH)
