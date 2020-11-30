@@ -8,6 +8,7 @@ import android.hardware.input.InputManager;
 import android.net.NetworkInfo;
 import android.net.wifi.WifiManager;
 import android.os.AsyncTask;
+import android.os.Build;
 import android.os.Bundle;
 import android.support.v7.app.AppCompatActivity;
 import android.text.format.Formatter;
@@ -19,6 +20,8 @@ import android.view.View;
 import android.widget.Button;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
+import android.widget.SeekBar;
+import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -30,13 +33,15 @@ public class DroneActivity extends AppCompatActivity {
 
     TcpClient mTcpClient;
     TextView textView1, textView2, textView3;
+    Switch switchBtn;
     LinearLayout myLayout;
     ImageView isConnected;
 
     int cpt=0;
     public static String IP_addr;
-    private char[] channels = {992,992,992,192,0,0,0,0,0,0,0,0,0,0,0,0, // RC channels (id 0 ->15)
+    private char[] channels = {992,992,992,192,992,0,0,0,0,0,0,0,0,0,0,0, // RC channels (id 0 ->15)
                             192,1792,0,0,0,0,0,0,0,0,0,0,0,0,0,0}; // my channels (id 16 -> 31)
+    float CHANNEL_RANGE_MIN = 192, CHANNEL_RANGE_MAX = 1792, CHANNEL_RANGE_CENTER = (CHANNEL_RANGE_MAX - CHANNEL_RANGE_MIN)/2 + CHANNEL_RANGE_MIN;
     char[] sendBuf = new char[25];
     private float[] mAxes = new float[AxesMapping.values().length];
     public boolean gamePadConnected = false;
@@ -44,6 +49,7 @@ public class DroneActivity extends AppCompatActivity {
     private WifiManager wifiManager;
     WifiReceiver receiverWifi;
     private InputManager mInputManager;
+    SeekBar seekBar;
     ConnectTask connectTask = new ConnectTask();
     SendMessageTask sendMessageTask = new SendMessageTask();
 
@@ -52,13 +58,14 @@ public class DroneActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_drone);
 
-        Button btnSend = findViewById(R.id.btnSend);
+        switchBtn = findViewById(R.id.switch1);
         //editText = findViewById(R.id.editText);
         textView1 = findViewById(R.id.textView1);
         textView2 = findViewById(R.id.textView2);
         textView3 = findViewById(R.id.textView3);
         myLayout =  findViewById(R.id.my_layout);
         isConnected = findViewById(R.id.isConnected);
+        seekBar = findViewById(R.id.seekBar);
 
         myLayout.requestFocus();
         wifiManager = (WifiManager) getApplicationContext().getSystemService(Context.WIFI_SERVICE);
@@ -69,9 +76,11 @@ public class DroneActivity extends AppCompatActivity {
 
         mInputManager = (InputManager) getSystemService(Context.INPUT_SERVICE);
 
-        for(int i : mInputManager.getInputDeviceIds()){
+        for (int i : mInputManager.getInputDeviceIds()){
             if((mInputManager.getInputDevice(i).getSources() & InputDevice.SOURCE_GAMEPAD)!=0){
                 gamePadConnected = true;
+                channels[5] = (char) CHANNEL_RANGE_MAX;
+                updateDisplay();
             }
         }
 
@@ -80,22 +89,27 @@ public class DroneActivity extends AppCompatActivity {
             wifiManager.setWifiEnabled(true);
         }
 
-        btnSend.setOnClickListener(view -> {
+        switchBtn.setOnCheckedChangeListener((compoundButton, b) -> {
+            channels[4] = (char) map((switchBtn.isChecked() ? 1 : 0), CHANNEL_RANGE_MIN, CHANNEL_RANGE_MAX);
+            updateDisplay();
+        });
+
+        /*btnSend.setOnClickListener(view -> {
             channelsToSBUS();
             if (wifiManager.getConnectionInfo()!=null) {
                 if (mTcpClient != null) {
                     Log.d(TAG, "onClick: SendMessageTask created");
                     //new SendMessageTask().executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, sendBufTest);
-                    /*textView1.setText("");
+                    textView1.setText("");
                     textView2.setText("");
                     for (int i=0; i<sendBufTest.length; i++){
                         textView1.append("sendBufTest = "+Integer.toBinaryString(sendBufTest[i])+"\n");
-                    }*/
+                    }
                 }
             } else {
                 Toast.makeText(getApplicationContext(),"No connected device", Toast.LENGTH_SHORT).show();
             }
-        });
+        });*/
 
         mInputManager.registerInputDeviceListener(new InputManager.InputDeviceListener() {
             @Override
@@ -103,6 +117,8 @@ public class DroneActivity extends AppCompatActivity {
                 Log.d(TAG, "onInputDeviceAdded: "+mInputManager.getInputDevice(i));
                 if((mInputManager.getInputDevice(i).getSources() & InputDevice.SOURCE_GAMEPAD)!=0) {
                     gamePadConnected = true;
+                    channels[5] = (char) CHANNEL_RANGE_MAX;
+                    updateDisplay();
                     if (mTcpClient != null && mTcpClient.mRun && sendMessageTask.getStatus() == AsyncTask.Status.PENDING) {
                         sendMessageTask.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
                     }
@@ -115,8 +131,9 @@ public class DroneActivity extends AppCompatActivity {
                 for(int j : mInputManager.getInputDeviceIds()){
                     if((mInputManager.getInputDevice(j).getSources() & InputDevice.SOURCE_GAMEPAD)!=0){
                         gamePadConnected = false;
+                        channels[5] = (char) CHANNEL_RANGE_CENTER;
+                        updateDisplay();
                     }
-                    //textView3.append(j+" ");
                 }
             }
 
@@ -125,6 +142,21 @@ public class DroneActivity extends AppCompatActivity {
                 Log.d(TAG, "onInputDeviceChanged: "+mInputManager.getInputDevice(i));
             }
         }, null);
+
+        seekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean user) {
+
+                updateChannels();
+                updateDisplay();
+            }
+
+            @Override
+            public void onStartTrackingTouch(SeekBar seekBar) {}
+
+            @Override
+            public void onStopTrackingTouch(SeekBar seekBar) {}
+        });
     }
 
 
@@ -136,13 +168,10 @@ public class DroneActivity extends AppCompatActivity {
             for (AxesMapping axesMapping : AxesMapping.values()) {
                 mAxes[axesMapping.ordinal()] = getCenteredAxis(ev, device, axesMapping.getMotionEvent());
             }
+            //textView3.setText((int) ev.getAxisValue(MotionEvent.AXIS_RY));
+            //textView3.setText(mAxes);
+            updateDisplay();
             updateChannels();
-            textView1.setText("");
-            textView2.setText("");
-            for (int i=0; i<=15; i++){
-                textView1.append("fcuChannels["+i+"] = "+(short) channels[i]+"\n");
-                //textView2.append("["+i+"] = "+Integer.toBinaryString(channels[i])+"\n");
-            }
             //textView2.setText(channelsToSBUS());
             channelsToSBUS();
             /*for (int i=16; i<=31; i++){
@@ -155,6 +184,18 @@ public class DroneActivity extends AppCompatActivity {
             return true;
         }
         return super.dispatchGenericMotionEvent(ev);
+    }
+
+    void updateDisplay() {
+        textView1.setText("");
+        textView2.setText("");
+        for (int i = 0; i < channels.length; i++) {
+            textView1.append("Channels[" + i + "] = " + (short) channels[i] + "\n");
+            //textView2.append("["+i+"] = "+Integer.toBinaryString(channels[i])+"\n");
+        }
+        for (int i = 0; i < mAxes.length; i++) {
+            textView2.append("mAxes[" + i + "] = " + mAxes[i] + "\n");
+        }
     }
 
     void channelsToSBUS(){
@@ -185,25 +226,24 @@ public class DroneActivity extends AppCompatActivity {
         sendBuf[23] = 0x00;
         sendBuf[24] = 0x00;
 
-        textView2.setText("");
+        /*textView2.setText("");
         for (int k=0; k<sendBuf.length; k++) {
             textView2.append("packet["+k+"] = "+String.format("%02X\n",(byte) sendBuf[k]));
-        }
+        }*/
     }
 
 
     float map(float x, float out_min, float out_max) {
-        return (x + 1) * (out_max - out_min) /2 + out_min;
+        return (x + 1)*(out_max - out_min)/2 + out_min;
     }
 
     private void updateChannels() {
 
-        float CHANNEL_RANGE_MIN = 192, CHANNEL_RANGE_MAX = 1792, CHANNEL_RANGE_CENTER = (CHANNEL_RANGE_MAX - CHANNEL_RANGE_MIN)/2;
-
         channels[0] = (char) Math.round(map(mAxes[0], CHANNEL_RANGE_MIN, CHANNEL_RANGE_MAX));
-        channels[1] = (char) Math.round(map(mAxes[1], CHANNEL_RANGE_MIN, CHANNEL_RANGE_MAX));
+        channels[1] = (char) Math.round(map(mAxes[1], CHANNEL_RANGE_MAX, CHANNEL_RANGE_MIN));// Pitch axis inverted
         channels[2] = (char) Math.round(map(mAxes[2], CHANNEL_RANGE_MIN, CHANNEL_RANGE_MAX));
-        channels[3] = (char) Math.round(map(mAxes[5], CHANNEL_RANGE_MIN, CHANNEL_RANGE_MAX));
+        channels[3] = (char) Math.round(map(mAxes[5], CHANNEL_RANGE_MIN, seekBar.getProgress()+192)); // seekbar min value can't be set in xml so the offset is added manually
+        //channels[4] = (char) map(channels[22], CHANNEL_RANGE_MIN, CHANNEL_RANGE_MAX);
 
         channels[16] = (char) Math.round(map(mAxes[4], CHANNEL_RANGE_MIN, CHANNEL_RANGE_MAX));
         channels[17] = (char) Math.round(map(mAxes[3], CHANNEL_RANGE_MIN, CHANNEL_RANGE_MAX));
@@ -283,11 +323,13 @@ public class DroneActivity extends AppCompatActivity {
                     break;
             }
             //channelsToPackets();
+            updateChannels();
             textView1.setText("");
             //textView2.setText("");
-            for (int i=0; i<=15; i++){
-                textView1.append("fcuChannels["+i+"] = "+(short) channels[i]+"\n");
+            for (int i=0; i<=31; i++){
+                textView1.append("Channels["+i+"] = "+(short) channels[i]+"\n");
             }
+            channelsToSBUS();
             /*for (int i=16; i<=31; i++){
                 textView2.append("myChannels["+(i-16)+"] = "+(short) channels[i]+"\n");
             }*/
@@ -331,9 +373,6 @@ public class DroneActivity extends AppCompatActivity {
                     e.printStackTrace();
                 } finally {
                     mTcpClient.sendMessageByte(channels);
-                }
-                if (gamePadConnected) {
-                    //mTcpClient.sendMessageByte(channels);
                 }
             }
         }

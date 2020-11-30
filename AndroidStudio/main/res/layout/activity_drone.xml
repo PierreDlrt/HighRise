@@ -16,30 +16,75 @@
         android:layout_weight="10"
         android:orientation="horizontal">
 
-        <Button
-            android:id="@+id/btnSend"
+        <TextView
+            android:id="@+id/textView"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:layout_weight="1"
-            android:text="Send"
-            android:textAlignment="center"
-            android:textSize="24sp" />
+            android:layout_weight="5"
+            android:gravity="right|center_vertical"
+            android:text="Connectivity"
+            android:textColor="#000000" />
 
         <ImageView
             android:id="@+id/isConnected"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:layout_weight="4"
+            android:layout_weight="5.5"
             android:fadingEdge="horizontal|vertical"
             android:padding="20dp"
             android:src="@drawable/circle_red" />
+
+        <Switch
+            android:id="@+id/switch1"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:layout_weight="3"
+            android:checked="false"
+            android:gravity="center_vertical|end"
+            android:switchTextAppearance="@style/TextAppearance.AppCompat.Large"
+            android:text="Arming status"
+            android:textColor="#000000"
+            android:textOff="DISARMED"
+            android:textOn="ARMED" />
 
     </LinearLayout>
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent"
+        android:layout_marginEnd="20dp"
+        android:layout_weight="10"
+        android:orientation="horizontal">
+
+        <TextView
+            android:id="@+id/textView4"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:layout_weight="5"
+            android:gravity="center_horizontal|center_vertical"
+            android:text="Max throttle"
+            android:textColor="#000000" />
+
+        <SeekBar
+            android:id="@+id/seekBar"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:max="1600"
+            android:progress="800"
+            android:thumbOffset="3dp"
+            android:paddingLeft="3dp"
+            android:paddingRight="3dp"
+            android:progressBackgroundTint="#7E7E7E"
+            android:progressTint="@color/colorAccent"
+            android:thumbTint="@color/colorPrimary" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
         android:layout_weight="2"
+        android:paddingTop="2dp"
         android:orientation="horizontal">
 
         <TextView
@@ -49,31 +94,32 @@
             android:layout_weight="1"
             android:text="Packets"
             android:textAlignment="viewStart"
-            android:textSize="14sp" />
+            android:textSize="12sp" />
 
-        <TextView
-            android:id="@+id/textView2"
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:layout_weight="1"
-            android:text="My channels"
-            android:textAlignment="viewStart"
-            android:textSize="14sp" />
-    </LinearLayout>
+            android:orientation="vertical"
+            android:visibility="visible">
 
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:layout_weight="10"
-        android:orientation="horizontal"
-        android:visibility="visible">
+            <TextView
+                android:id="@+id/textView2"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:text="My channels"
+                android:textAlignment="viewStart"
+                android:textSize="14sp" />
 
-        <TextView
-            android:id="@+id/textView3"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:layout_weight="1"
-            android:text="TextView" />
+            <TextView
+                android:id="@+id/textView3"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:text="TextView" />
+        </LinearLayout>
+
     </LinearLayout>
 
 </LinearLayout>
