@@ -64,20 +64,20 @@ PinMuxConfig(void)
     //
     // Configure PIN_55 for UART0 UART0_TX
     //
-    MAP_PinTypeUART(PIN_55, PIN_MODE_3);
+    //MAP_PinTypeUART(PIN_55, PIN_MODE_3);
 
     //
     // Configure PIN_57 for UART0 UART0_RX
     //
-    MAP_PinTypeUART(PIN_57, PIN_MODE_3);
+    //MAP_PinTypeUART(PIN_57, PIN_MODE_3);
 
     //
-    // Configure PIN_16 for UART0 UART1_TX
+    // Configure PIN_1 for UART1 UART1_TX
     //
     MAP_PinTypeUART(PIN_01, PIN_MODE_7);
 
     //
-    // Configure PIN_45 for UART0 UART1_RX
+    // Configure PIN_45 for UART1 UART1_RX
     //
     MAP_PinTypeUART(PIN_45, PIN_MODE_2);
 }
