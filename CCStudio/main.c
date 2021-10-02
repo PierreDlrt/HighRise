@@ -4,38 +4,8 @@
 //! @{
 //
 //****************************************************************************
+#include "cc3200_sdk.h"
 
-#include <stdlib.h>
-#include <stdio.h>
-#include <string.h>
-
-// Simplelink includes
-#include "simplelink.h"
-#include "wlan.h"
-
-// driverlib includes
-#include "hw_types.h"
-#include "hw_ints.h"
-#include "rom.h"
-#include "rom_map.h"
-#include "interrupt.h"
-#include "prcm.h"
-#include "utils.h"
-
-// free_rtos/ti-rtos includes
-#include "osi.h"
-#include "heap_3.c"
-
-// common interface includes
-#include "common.h"
-#include "udma_if.h"
-#include "hw_memmap.h"
-#include "rom_map.h"
-#ifndef NOTERM
-#include "uart_if.h"
-#endif
-#include "uart.h"
-#include "pinmux.h"
 
 #define APP_NAME                "WLAN AP"
 #define APPLICATION_VERSION     "1.1.1"
@@ -47,34 +17,13 @@
 // Values for below macros shall be modified for setting the 'Ping' properties
 //
 
-#define NUM_MY_CHANNEL          16
-#define NUM_FCU_CHANNEL         16
-#define SBUS_SIZE               25
 
 #define PORT_NUM            5001
 #define BUF_SIZE            960
-#define TCP_PACKET_COUNT    50
 
-// Application specific status/error codes
-typedef enum{
-    // Choosing this number to avoid overlap w/ host-driver's error codes
-    LAN_CONNECTION_FAILED = -0x7D0,
-    SOCKET_CREATE_ERROR = LAN_CONNECTION_FAILED - 1,
-    BIND_ERROR = SOCKET_CREATE_ERROR - 1,
-    LISTEN_ERROR = BIND_ERROR -1,
-    SOCKET_OPT_ERROR = LISTEN_ERROR -1,
-    CONNECT_ERROR = SOCKET_OPT_ERROR -1,
-    ACCEPT_ERROR = CONNECT_ERROR - 1,
-    SEND_ERROR = ACCEPT_ERROR -1,
-    RECV_ERROR = SEND_ERROR -1,
-    SOCKET_CLOSE_ERROR = RECV_ERROR -1,
-    CLIENT_CONNECTION_FAILED = SOCKET_CLOSE_ERROR -1,
-    DEVICE_NOT_IN_STATION_MODE = CLIENT_CONNECTION_FAILED - 1,
 
-    STATUS_CODE_MAX = -0xBB8
-}e_AppStatusCodes;
 
-typedef struct taskParam{
+typedef struct {
     OsiSyncObj_t *pSyncObjStart;
     unsigned short usPort;
 }taskParam;
@@ -83,14 +32,6 @@ typedef struct taskParam{
 //*****************************************************************************
 //                 GLOBAL VARIABLES -- Start
 //*****************************************************************************
-unsigned char  g_ulStatus = 0;
-unsigned long  g_ulStaIp = 0;
-unsigned long  g_ulPingPacketsRecv = 0;
-unsigned long  g_uiGatewayIP = 0;
-unsigned char g_cBsdSendBuf[BUF_SIZE];
-uint16_t g_cBsdRecvBuf[BUF_SIZE]= {0};
-int pccount, recvCall;
-
 
 
 OsiMsgQ_t msgQfb = NULL;
@@ -105,19 +46,10 @@ extern uVectorEntry __vector_table;
 //                 GLOBAL VARIABLES -- End
 //*****************************************************************************
 
-const uint32_t _sbusBaud = 100000;
-const uint8_t _sbusHeader = 0x0F;
-const uint8_t _sbusFooter = 0x00;
-
 
 //****************************************************************************
 //                      LOCAL FUNCTION PROTOTYPES
 //****************************************************************************
-
-static long ConfigureSimpleLinkToDefaultState();
-static void InitializeAppVariables();
-int connectionManager();
-
 
 
 #ifdef USE_FREERTOS
@@ -147,308 +79,7 @@ void vApplicationStackOverflowHook(OsiTaskHandle *pxTask, signed char *pcTaskNam
 }
 #endif //USE_FREERTOS
 
-void SimpleLinkWlanEventHandler(SlWlanEvent_t *pSlWlanEvent){
 
-    switch(pSlWlanEvent->Event){
-        case SL_WLAN_CONNECT_EVENT:
-            SET_STATUS_BIT(g_ulStatus, STATUS_BIT_CONNECTION);
-            break;
-
-        case SL_WLAN_DISCONNECT_EVENT:
-        {
-            slWlanConnectAsyncResponse_t*  pEventData = NULL;
-
-            CLR_STATUS_BIT(g_ulStatus, STATUS_BIT_CONNECTION);
-            CLR_STATUS_BIT(g_ulStatus, STATUS_BIT_IP_AQUIRED);
-
-            pEventData = &pSlWlanEvent->EventData.STAandP2PModeDisconnected;
-
-            // If the user has initiated 'Disconnect' request,
-            //'reason_code' is SL_WLAN_DISCONNECT_USER_INITIATED_DISCONNECTION
-            if(SL_WLAN_DISCONNECT_USER_INITIATED_DISCONNECTION == pEventData->reason_code){
-                UART_PRINT("Device disconnected from the AP on application's "
-                            "request \n\r");
-            }
-            else{
-                UART_PRINT("Device disconnected from the AP on an ERROR..!! \n\r");
-            }
-
-        }
-        break;
-
-        case SL_WLAN_STA_CONNECTED_EVENT:
-            // when device is in AP mode and any client connects to device cc3xxx
-            SET_STATUS_BIT(g_ulStatus, STATUS_BIT_CONNECTION);
-            break;
-
-        case SL_WLAN_STA_DISCONNECTED_EVENT:
-            // when client disconnects from device (AP)
-            CLR_STATUS_BIT(g_ulStatus, STATUS_BIT_CONNECTION);
-            CLR_STATUS_BIT(g_ulStatus, STATUS_BIT_IP_LEASED);
-            break;
-
-        default:
-            UART_PRINT("[WLAN EVENT] Unexpected event \n\r");
-            break;
-    }
-}
-
-void SimpleLinkNetAppEventHandler(SlNetAppEvent_t *pNetAppEvent){
-
-    switch(pNetAppEvent->Event){
-        case SL_NETAPP_IPV4_IPACQUIRED_EVENT:
-        case SL_NETAPP_IPV6_IPACQUIRED_EVENT:
-            SET_STATUS_BIT(g_ulStatus, STATUS_BIT_IP_AQUIRED);
-            break;
-
-        case SL_NETAPP_IP_LEASED_EVENT:
-        {
-            SET_STATUS_BIT(g_ulStatus, STATUS_BIT_IP_LEASED);
-            g_ulStaIp = (pNetAppEvent)->EventData.ipLeased.ip_address;
-            UART_PRINT("[NETAPP EVENT] IP Leased to Client: IP=%d.%d.%d.%d , ",
-                        SL_IPV4_BYTE(g_ulStaIp,3), SL_IPV4_BYTE(g_ulStaIp,2),
-                        SL_IPV4_BYTE(g_ulStaIp,1), SL_IPV4_BYTE(g_ulStaIp,0));
-        }
-        break;
-
-        case SL_NETAPP_IP_RELEASED_EVENT:
-            CLR_STATUS_BIT(g_ulStatus, STATUS_BIT_IP_LEASED);
-            UART_PRINT("[NETAPP EVENT] IP Released for Client: IP=%d.%d.%d.%d , ",
-                        SL_IPV4_BYTE(g_ulStaIp,3), SL_IPV4_BYTE(g_ulStaIp,2),
-                        SL_IPV4_BYTE(g_ulStaIp,1), SL_IPV4_BYTE(g_ulStaIp,0));
-            break;
-
-        default:
-            UART_PRINT("[NETAPP EVENT] Unexpected event [0x%x] \n\r", pNetAppEvent->Event);
-            break;
-    }
-}
-
-
-void SimpleLinkHttpServerCallback(SlHttpServerEvent_t *pHttpEvent,
-                                  SlHttpServerResponse_t *pHttpResponse){
-    // Unused in this application
-}
-
-void SimpleLinkGeneralEventHandler(SlDeviceEvent_t *pDevEvent){
-    //
-    // Most of the general errors are not FATAL are are to be handled
-    // appropriately by the application
-    //
-    UART_PRINT("[GENERAL EVENT] - ID=[%d] Sender=[%d]\n\n",
-               pDevEvent->EventData.deviceEvent.status,
-               pDevEvent->EventData.deviceEvent.sender);
-}
-
-
-void SimpleLinkSockEventHandler(SlSockEvent_t *pSock){
-    //
-    // This application doesn't work w/ socket - Events are not expected
-    //
-    switch( pSock->Event ){
-        case SL_SOCKET_TX_FAILED_EVENT:
-            switch( pSock->socketAsyncEvent.SockTxFailData.status){
-                case SL_ECLOSE:
-                    UART_PRINT("[SOCK ERROR] - close socket (%d) operation "
-                                "failed to transmit all queued packets\n\n",
-                                    pSock->socketAsyncEvent.SockTxFailData.sd);
-                    break;
-                default:
-                    UART_PRINT("[SOCK ERROR] - TX FAILED  :  socket %d , reason "
-                                "(%d) \n\n",
-                                pSock->socketAsyncEvent.SockTxFailData.sd, pSock->socketAsyncEvent.SockTxFailData.status);
-                    break;
-            }
-            break;
-
-        default:
-            UART_PRINT("[SOCK EVENT] - Unexpected Event [%x0x]\n\n",pSock->Event);
-            break;
-    }
-
-}
-
-void SimpleLinkPingReport(SlPingReport_t *pPingReport){
-
-    SET_STATUS_BIT(g_ulStatus, STATUS_BIT_PING_DONE);
-    g_ulPingPacketsRecv = pPingReport->PacketsReceived;
-}
-
-static void InitializeAppVariables(){
-
-    g_ulStatus = 0;
-    g_ulStaIp = 0;
-    g_ulPingPacketsRecv = 0;
-    g_uiGatewayIP = 0;
-}
-
-static long ConfigureSimpleLinkToDefaultState(){
-
-    //UART_PRINT("Enter configslDefState\n\r");
-    SlVersionFull   ver = {0};
-    _WlanRxFilterOperationCommandBuff_t  RxFilterIdMask = {0};
-
-    unsigned char ucVal = 1;
-    unsigned char ucConfigOpt = 0;
-    unsigned char ucConfigLen = 0;
-    unsigned char ucPower = 0;
-
-    long lRetVal = -1;
-    long lMode = -1;
-
-    //UART_PRINT("sl_start\n\r");
-    lMode = sl_Start(0, 0, 0);
-    //UART_PRINT("end sl_start\n\r");
-    ASSERT_ON_ERROR(lMode);
-
-    // If the device is not in station-mode, try configuring it in station-mode
-    if (ROLE_STA != lMode){
-        if (ROLE_AP == lMode){
-            // If the device is in AP mode, we need to wait for this event
-            // before doing anything
-            while(!IS_IP_ACQUIRED(g_ulStatus)){
-#ifndef SL_PLATFORM_MULTI_THREADED
-              _SlNonOsMainLoopTask();
-#endif
-            }
-        }
-
-        // Switch to STA role and restart
-        lRetVal = sl_WlanSetMode(ROLE_STA);
-        ASSERT_ON_ERROR(lRetVal);
-
-        lRetVal = sl_Stop(0xFF);
-        ASSERT_ON_ERROR(lRetVal);
-
-        lRetVal = sl_Start(0, 0, 0);
-        ASSERT_ON_ERROR(lRetVal);
-
-        // Check if the device is in station again
-        if (ROLE_STA != lRetVal){
-            // We don't want to proceed if the device is not coming up in STA-mode
-            return DEVICE_NOT_IN_STATION_MODE;
-        }
-    }
-
-    // Get the device's version-information
-    ucConfigOpt = SL_DEVICE_GENERAL_VERSION;
-    ucConfigLen = sizeof(ver);
-    lRetVal = sl_DevGet(SL_DEVICE_GENERAL_CONFIGURATION, &ucConfigOpt,
-                                &ucConfigLen, (unsigned char *)(&ver));
-    ASSERT_ON_ERROR(lRetVal);
-
-    UART_PRINT("Host Driver Version: %s\n\r",SL_DRIVER_VERSION);
-    UART_PRINT("Build Version %d.%d.%d.%d.31.%d.%d.%d.%d.%d.%d.%d.%d\n\r",
-    ver.NwpVersion[0],ver.NwpVersion[1],ver.NwpVersion[2],ver.NwpVersion[3],
-    ver.ChipFwAndPhyVersion.FwVersion[0],ver.ChipFwAndPhyVersion.FwVersion[1],
-    ver.ChipFwAndPhyVersion.FwVersion[2],ver.ChipFwAndPhyVersion.FwVersion[3],
-    ver.ChipFwAndPhyVersion.PhyVersion[0],ver.ChipFwAndPhyVersion.PhyVersion[1],
-    ver.ChipFwAndPhyVersion.PhyVersion[2],ver.ChipFwAndPhyVersion.PhyVersion[3]);
-
-    // Set connection policy to Auto + SmartConfig
-    //      (Device's default connection policy)
-    lRetVal = sl_WlanPolicySet(SL_POLICY_CONNECTION,
-                                SL_CONNECTION_POLICY(1, 0, 0, 0, 1), NULL, 0);
-    ASSERT_ON_ERROR(lRetVal);
-
-    // Remove all profiles
-    lRetVal = sl_WlanProfileDel(0xFF);
-    ASSERT_ON_ERROR(lRetVal);
-
-
-    //
-    // Device in station-mode. Disconnect previous connection if any
-    // The function returns 0 if 'Disconnected done', negative number if already
-    // disconnected Wait for 'disconnection' event if 0 is returned, Ignore
-    // other return-codes
-    //
-    lRetVal = sl_WlanDisconnect();
-    if(0 == lRetVal){
-        // Wait
-        while(IS_CONNECTED(g_ulStatus)){
-#ifndef SL_PLATFORM_MULTI_THREADED
-              _SlNonOsMainLoopTask();
-#endif
-        }
-    }
-
-    // Enable DHCP client
-    lRetVal = sl_NetCfgSet(SL_IPV4_STA_P2P_CL_DHCP_ENABLE,1,1,&ucVal);
-    ASSERT_ON_ERROR(lRetVal);
-
-    // Disable scan
-    ucConfigOpt = SL_SCAN_POLICY(0);
-    lRetVal = sl_WlanPolicySet(SL_POLICY_SCAN , ucConfigOpt, NULL, 0);
-    ASSERT_ON_ERROR(lRetVal);
-
-    // Set Tx power level for station mode
-    // Number between 0-15, as dB offset from max power - 0 will set max power
-    ucPower = 0;
-    lRetVal = sl_WlanSet(SL_WLAN_CFG_GENERAL_PARAM_ID,
-            WLAN_GENERAL_PARAM_OPT_STA_TX_POWER, 1, (unsigned char *)&ucPower);
-    ASSERT_ON_ERROR(lRetVal);
-
-    // Set PM policy to normal
-    lRetVal = sl_WlanPolicySet(SL_POLICY_PM , SL_NORMAL_POLICY, NULL, 0);
-    ASSERT_ON_ERROR(lRetVal);
-
-    // Unregister mDNS services
-    lRetVal = sl_NetAppMDNSUnRegisterService(0, 0);
-    ASSERT_ON_ERROR(lRetVal);
-
-    // Remove  all 64 filters (8*8)
-    memset(RxFilterIdMask.FilterIdMask, 0xFF, 8);
-    lRetVal = sl_WlanRxFilterSet(SL_REMOVE_RX_FILTER, (_u8 *)&RxFilterIdMask,
-                       sizeof(_WlanRxFilterOperationCommandBuff_t));
-    ASSERT_ON_ERROR(lRetVal);
-
-    lRetVal = sl_Stop(SL_STOP_TIMEOUT);
-    ASSERT_ON_ERROR(lRetVal);
-
-    InitializeAppVariables();
-
-    return lRetVal; // Success
-}
-
-
-static int ConfigureMode(int iMode){
-
-    char    pcSsidName[] = "High-Rise";
-    char    password[] = "pierre12";
-    long    lRetVal = -1;
-    _u8  val = SL_SEC_TYPE_WPA_WPA2;
-
-    //UART_PRINT("Enter the AP SSID name: ");
-    //GetSsidName(pcSsidName,33);
-    UART_PRINT("AP SSID name: %s\n\r", pcSsidName);
-
-    lRetVal = sl_WlanSetMode(ROLE_AP);
-    ASSERT_ON_ERROR(lRetVal);
-
-    lRetVal = sl_WlanSet(SL_WLAN_CFG_AP_ID, WLAN_AP_OPT_SSID, strlen(pcSsidName),
-                         (unsigned char*)pcSsidName);
-    ASSERT_ON_ERROR(lRetVal);
-
-    //Set no password
-    lRetVal = sl_WlanSet(SL_WLAN_CFG_AP_ID, WLAN_AP_OPT_SECURITY_TYPE, 1,
-                         (_u8*)&val);
-
-    ASSERT_ON_ERROR(lRetVal);
-
-    lRetVal = sl_WlanSet(SL_WLAN_CFG_AP_ID, WLAN_AP_OPT_PASSWORD, strlen(password),
-                         (unsigned char *)password);
-    ASSERT_ON_ERROR(lRetVal);
-
-    UART_PRINT("Device is configured in AP mode\n\r");
-
-    /* Restart Network processor */
-    lRetVal = sl_Stop(SL_STOP_TIMEOUT);
-
-    // reset status bits
-    CLR_STATUS_BIT_ALL(g_ulStatus);
-
-    return sl_Start(NULL,NULL,NULL);
-}
 
 
 void printBinary(unsigned char byte) {
@@ -486,235 +117,6 @@ void printdBinary(uint16_t dbyte) {
 }
 
 
-void TCPServerTask( void *pvParameters ){
-
-    unsigned char   ucDHCP;
-    long            lRetVal = -1;
-    int             iCounter;
-    //long            lLoopCount = 0;
-    //size_t          lenfdp;
-
-    taskParam *pxParameters;
-    pxParameters = (taskParam*) pvParameters;
-
-    InitializeAppVariables();
-
-
-    // filling the buffer
-    for (iCounter=0 ; iCounter<TCP_PACKET_COUNT ; iCounter++){
-        g_cBsdSendBuf[iCounter] = (char)(iCounter+65);
-        //UART_PRINT("icounter=%d", iCounter);
-    }
-
-    //
-    // Following function configure the device to default state by cleaning
-    // the persistent settings stored in NVMEM (viz. connection profiles &
-    // policies, power policy etc)
-    //
-    // Applications may choose to skip this step if the developer is sure
-    // that the device is in its default state at start of applicaton
-    //
-    // Note that all profiles and persistent settings that were done on the
-    // device will be lost
-    //
-    //UART_PRINT("WlanAPEntry\n\r");
-    lRetVal = ConfigureSimpleLinkToDefaultState();
-    if(lRetVal < 0){
-        if (DEVICE_NOT_IN_STATION_MODE == lRetVal)
-            UART_PRINT("Failed to configure the device in its default state \n\r");
-
-        LOOP_FOREVER();
-    }
-
-    UART_PRINT("Device is configured in default state \n\r");
-
-    //
-    // Asumption is that the device is configured in station mode already
-    // and it is in its default state
-    //
-    lRetVal = sl_Start(NULL,NULL,NULL);
-
-    if (lRetVal < 0){
-        UART_PRINT("Failed to start the device \n\r");
-        LOOP_FOREVER();
-    }
-
-    UART_PRINT("Device started as STATION \n\r");
-
-    //
-    // Configure the networking mode and ssid name(for AP mode)
-    //
-    if(lRetVal != ROLE_AP){
-        if(ConfigureMode(lRetVal) != ROLE_AP){
-            UART_PRINT("Unable to set AP mode, exiting Application...\n\r");
-            sl_Stop(SL_STOP_TIMEOUT);
-            LOOP_FOREVER();
-        }
-    }
-
-    while(!IS_IP_ACQUIRED(g_ulStatus)){
-        //looping till ip is acquired
-    }
-
-    unsigned char len = sizeof(SlNetCfgIpV4Args_t);
-    SlNetCfgIpV4Args_t ipV4 = {0};
-
-    // get network configuration
-    lRetVal = sl_NetCfgGet(SL_IPV4_AP_P2P_GO_GET_INFO,&ucDHCP,&len,
-                            (unsigned char *)&ipV4);
-    if (lRetVal < 0){
-        UART_PRINT("Failed to get network configuration \n\r");
-        LOOP_FOREVER();
-    }
-
-    for(;;){
-        //UART_PRINT("Task 1 start\n\r");
-        connectionManager();
-    }
-}
-
-
-int connectionManager() {
-
-    SlSockAddrIn_t  sLocalAddr;
-    SlSockAddrIn_t  sAddr;
-    int             iSockID;
-    int             iAddrSize;
-    int             iStatus;
-    long            lNonBlocking = 1;
-    int             iNewSockID;
-    int             iTestBufLen;
-    int             i;
-    TickType_t      recv1 = xTaskGetTickCount();//, recv2 = xTaskGetTickCount();
-    static TickType_t xLastWakeTime;
-    static const TickType_t xFrequency = 20;
-    //int             cpt=0;
-    //unsigned long   num;
-
-    iTestBufLen  = BUF_SIZE;
-
-    while(IS_IP_LEASED(g_ulStatus)){
-        //waiting for the client to connect
-        UART_PRINT("Client is connected to Device\n\r");
-        //UART_PRINT("g_cBsdRecvBuf = %s\n\r", g_cBsdRecvBuf);
-
-        ////////////////////////// Client connected to Device /////////////////////////////
-
-        //filling the TCP server socket address
-        sLocalAddr.sin_family = SL_AF_INET;
-        sLocalAddr.sin_port = sl_Htons((unsigned short) PORT_NUM);
-        sLocalAddr.sin_addr.s_addr = 0;
-
-        // creating a TCP socket
-        iSockID = sl_Socket(SL_AF_INET,SL_SOCK_STREAM, 0);
-        if( iSockID < 0 ){
-            // error
-            ASSERT_ON_ERROR(SOCKET_CREATE_ERROR);
-        }
-        else {
-            iAddrSize = sizeof(SlSockAddrIn_t);
-
-            // binding the TCP socket to the TCP server address
-            if(sl_Bind(iSockID, (SlSockAddr_t *)&sLocalAddr, iAddrSize)){
-                // error
-                sl_Close(iSockID);
-                ERR_PRINT(BIND_ERROR);
-            }
-            else {
-                // putting the socket for listening to the incoming TCP connection
-                if(sl_Listen(iSockID, 0)){
-                    sl_Close(iSockID);
-                    ERR_PRINT(LISTEN_ERROR);
-                }
-                else {
-                    // setting socket option to make the socket as non blocking
-                    if(sl_SetSockOpt(iSockID, SL_SOL_SOCKET, SL_SO_NONBLOCKING,
-                                     &lNonBlocking, sizeof(lNonBlocking))){
-                        sl_Close(iSockID);
-                        ERR_PRINT(SOCKET_OPT_ERROR);
-                    }
-                    else {
-                        UART_PRINT("Waiting for TCP client connection...\n\r");
-                        iNewSockID = SL_EAGAIN;
-
-                        // waiting for an incoming TCP connection
-                        while( iNewSockID < 0 ){
-                            // accepts a connection form a TCP client, if there is any
-                            // otherwise returns SL_EAGAIN
-                            iNewSockID = sl_Accept(iSockID, ( struct SlSockAddr_t *)&sAddr,
-                                                    (SlSocklen_t*)&iAddrSize);
-                            if( iNewSockID == SL_EAGAIN ){
-                               MAP_UtilsDelay(10000);
-                            }
-                            else if( iNewSockID < 0 ){
-                                // error
-                                sl_Close(iNewSockID);
-                                sl_Close(iSockID);
-                                ERR_PRINT(ACCEPT_ERROR);
-                            }
-                        }
-                        UART_PRINT("TCP client connected\n\r");
-
-                        if(sl_SetSockOpt(iNewSockID, SL_SOL_SOCKET, SL_SO_NONBLOCKING,
-                                                &lNonBlocking, sizeof(lNonBlocking))){
-                            ERR_PRINT(SOCKET_OPT_ERROR);
-                            sl_Close(iNewSockID);
-                            sl_Close(iSockID);
-                            break;
-                        }
-
-                        // waits for 1000 packets from the connected TCP client
-                        UART_PRINT("Waiting for incoming message...\n\r");
-                        while (1) {
-                            xLastWakeTime = xTaskGetTickCount();
-                            //UART_PRINT("1\n\r");
-                            if(!IS_IP_LEASED(g_ulStatus)) {
-                                UART_PRINT("Connect a client to device...\n\r");
-                                sl_Close(iNewSockID);
-                                sl_Close(iSockID);
-                                return -1;
-                            }
-
-                            //recv1 = xTaskGetTickCount();
-                            //UART_PRINT("Recv: %d\n\r", recv1 - recv2);
-                            //recv2 = xTaskGetTickCount();
-                            //UART_PRINT("recv\n\r");
-                            //UART_PRINT("recv\n\r");
-                            //UART_PRINT("2\n\r");
-                            iStatus = sl_Recv(iNewSockID, g_cBsdRecvBuf, iTestBufLen, 0);
-                            //UART_PRINT("[0]=%d\n\r", g_cBsdRecvBuf[0]);
-                            //UART_PRINT("3\n\r");
-                            if (iStatus == SL_EAGAIN) {
-                                //UART_PRINT("4\n\r");
-                                recvCall = 0;
-                                pccount = 0;
-                                //vTaskDelayUntil( &xLastWakeTime, xFrequency);
-                            }
-                            else if (iStatus > 0) {
-
-                                recvCall = xTaskGetTickCount() - recv1;
-                                recv1 = xTaskGetTickCount();
-                                //UART_PRINT("5\n\r");
-                                //UART_PRINT("PC:%d\n\r", iStatus);
-                                pccount = iStatus;
-                            }
-                            else {
-                                sl_Close(iNewSockID);
-                                sl_Close(iSockID);
-                                break;
-                            }
-                            //UART_PRINT("end T1\n\r");
-                            //UART_PRINT("6\n\r");
-                            vTaskDelayUntil( &xLastWakeTime, xFrequency);
-                        }
-                    }
-                }
-            }
-        }
-        UART_PRINT("[TCP Server Task] Error occurred\n\r");
-    }
-    return -1; // Wifi client disconnected
-}
 
 /*void DroneStatusFeedBack( void *pvParameters ) {
 
@@ -724,84 +126,12 @@ uint16_t mapValue(uint8_t val, int out_min, int out_max) {
     return val * (out_max - out_min)/255 + out_min;
 }
 
-void CommandManagerTask(void *pvParameters) {
-
-    static uint8_t sbusBytes[SBUS_SIZE]={0};
-    int i;
-    static TickType_t xLastWakeTime, endWhile; //, first, second;
-    static const TickType_t xFrequency = 10; // SBUS protocol sends every 14ms (analog mode) or 7ms (highspeed mode)
-    static uint16_t fcuChannels[NUM_FCU_CHANNEL]={0}, myChannels[NUM_MY_CHANNEL]={0};
-
-    for(;;){
-        //UART_PRINT("T2\n\r");
-        xLastWakeTime = xTaskGetTickCount();
-        //UART_PRINT("4:%d\n\r",xTaskGetTickCount());
-        //UART_PRINT("A\n\r");
-        if(IS_IP_LEASED(g_ulStatus)){
-
-            /*
-            * g_cBsdRecvBuf = [25 SBUS formatted packets, 15 channels containing key events]
-            */
-
-            for (i=0; i<NUM_FCU_CHANNEL; i++){
-                fcuChannels[i] = g_cBsdRecvBuf[i];
-            }
-
-            for (i=0; i<NUM_MY_CHANNEL; i++){
-                myChannels[i] = g_cBsdRecvBuf[i+NUM_FCU_CHANNEL];
-            }
-
-            sbusBytes[0]  = _sbusHeader;
-            sbusBytes[1]  = (uint8_t) ((fcuChannels[0] & 0x07FF));
-            sbusBytes[2]  = (uint8_t) ((fcuChannels[0] & 0x07FF)>>8 | (fcuChannels[1] & 0x07FF)<<3);
-            sbusBytes[3]  = (uint8_t) ((fcuChannels[1] & 0x07FF)>>5 | (fcuChannels[2] & 0x07FF)<<6);
-            sbusBytes[4]  = (uint8_t) ((fcuChannels[2] & 0x07FF)>>2);
-            sbusBytes[5]  = (uint8_t) ((fcuChannels[2] & 0x07FF)>>10 | (fcuChannels[3] & 0x07FF)<<1);
-            sbusBytes[6]  = (uint8_t) ((fcuChannels[3] & 0x07FF)>>7 | (fcuChannels[4] & 0x07FF)<<4);
-            sbusBytes[7]  = (uint8_t) ((fcuChannels[4] & 0x07FF)>>4 | (fcuChannels[5] & 0x07FF)<<7);
-            sbusBytes[8]  = (uint8_t) ((fcuChannels[5] & 0x07FF)>>1);
-            sbusBytes[9]  = (uint8_t) ((fcuChannels[5] & 0x07FF)>>9 | (fcuChannels[6] & 0x07FF)<<2);
-            sbusBytes[10] = (uint8_t) ((fcuChannels[6] & 0x07FF)>>6 | (fcuChannels[7] & 0x07FF)<<5);
-            sbusBytes[11] = (uint8_t) ((fcuChannels[7] & 0x07FF)>>3);
-            sbusBytes[12] = (uint8_t) ((fcuChannels[8] & 0x07FF));
-            sbusBytes[13] = (uint8_t) ((fcuChannels[8] & 0x07FF)>>8 | (fcuChannels[9] & 0x07FF)<<3);
-            sbusBytes[14] = (uint8_t) ((fcuChannels[9] & 0x07FF)>>5 | (fcuChannels[10] & 0x07FF)<<6);
-            sbusBytes[15] = (uint8_t) ((fcuChannels[10] & 0x07FF)>>2);
-            sbusBytes[16] = (uint8_t) ((fcuChannels[10] & 0x07FF)>>10 | (fcuChannels[11] & 0x07FF)<<1);
-            sbusBytes[17] = (uint8_t) ((fcuChannels[11] & 0x07FF)>>7 | (fcuChannels[12] & 0x07FF)<<4);
-            sbusBytes[18] = (uint8_t) ((fcuChannels[12] & 0x07FF)>>4 | (fcuChannels[13] & 0x07FF)<<7);
-            sbusBytes[19] = (uint8_t) ((fcuChannels[13] & 0x07FF)>>1);
-            sbusBytes[20] = (uint8_t) ((fcuChannels[13] & 0x07FF)>>9 | (fcuChannels[14] & 0x07FF)<<2);
-            sbusBytes[21] = (uint8_t) ((fcuChannels[14] & 0x07FF)>>6 | (fcuChannels[15] & 0x07FF)<<5);
-            sbusBytes[22] = (uint8_t) ((fcuChannels[15] & 0x07FF)>>3);
-            sbusBytes[23] = 0x00;
-            sbusBytes[24] = _sbusFooter;
-
-            //ClearTerm();
-            //UART_PRINT("\33[%dA", 30); // Move terminal cursor up %d lines
-            //UART_PRINT("5:%d\n\r",xTaskGetTickCount());
-            for (i=0; i<SBUS_SIZE; i++) {
-                MAP_UARTCharPut(UARTA1_BASE, sbusBytes[i]);//sbusBytes[i]);
-                //Message("test\n\r");
-                //UART_PRINT("%02X ", sbusBytes[i]);
-                //printBinary(sbusBytes[i]);
-            }
-            endWhile = xTaskGetTickCount()-xLastWakeTime;
-            //UART_PRINT("%d | %d\n\r", pccount, recvCall);
-        }
-        //UART_PRINT("B\n\r");
-        //UART_PRINT("6:%d\n\r",xTaskGetTickCount());
-        //UART_PRINT("%d\n\r", endWhile);
-        //UART_PRINT("end T2\n\r");
-        vTaskDelayUntil( &xLastWakeTime, xFrequency);
-    }
-}
 
 static void
-DisplayBanner(char * AppName) {
+DisplayBanner() {
     Report("\n\n\n\r");
     Report("\t\t *************************************************\n\r");
-    Report("\t\t       CC3200 %s Application       \n\r", AppName);
+    Report("\t\t       CC3200 "APP_NAME" Application       \n\r");
     Report("\t\t *************************************************\n\r");
     Report("\n\n\n\r");
 }
@@ -832,6 +162,7 @@ BoardInit(void) {
 }
 
 
+
 //*****************************************************************************
 //                            MAIN FUNCTION
 //*****************************************************************************
@@ -843,21 +174,15 @@ void main() {
     PinMuxConfig();
 
 #ifndef NOTERM
-    //InitTerm();
+    InitTerm();
 #endif
-
-    MAP_UARTConfigSetExpClk(CONSOLE,MAP_PRCMPeripheralClockGet(CONSOLE_PERIPH),
-                         UART_BAUD_RATE, (UART_CONFIG_WLEN_8 | UART_CONFIG_STOP_ONE |
-                         UART_CONFIG_PAR_NONE));
 
     MAP_UARTConfigSetExpClk(UARTA1_BASE, MAP_PRCMPeripheralClockGet(PRCM_UARTA1),
                           UART_BAUD_RATE_FCU, (UART_CONFIG_WLEN_8 | UART_CONFIG_STOP_TWO | // UART_CONFIG_STOP_TWO
                           UART_CONFIG_PAR_EVEN)); //UART_BAUD_RATE_FCU // UART_CONFIG_PAR_EVEN
 
-    //UART_PRINT("Enter main\n\r");
-
     ClearTerm();
-    DisplayBanner(APP_NAME);
+    DisplayBanner();
 
     //
     // Start the SimpleLink Host
@@ -865,7 +190,8 @@ void main() {
     OsiSyncObj_t pSyncObjStart;
     taskParam *pvParameters;
     OsiTaskHandle pServerHandle, pCommandTaskHandle;
-    pvParameters = (taskParam *) mem_Malloc(sizeof(taskParam));
+
+    PNETWORK_CONTEXT pNetCtx = (PNETWORK_CONTEXT) mem_Malloc(sizeof(NETWORK_CONTEXT));
 
     lRetVal = osi_SyncObjCreate(&pSyncObjStart);
     if(lRetVal < 0) {
@@ -895,7 +221,7 @@ void main() {
 
     lRetVal = osi_TaskCreate(TCPServerTask, \
                       (const signed char*)"Wireless LAN in AP mode", \
-                      OSI_STACK_SIZE, (void*) pvParameters, tskIDLE_PRIORITY+1, &pServerHandle );
+                      OSI_STACK_SIZE, pNetCtx, tskIDLE_PRIORITY+1, &pServerHandle );
     if(lRetVal < 0){
         ERR_PRINT(lRetVal);
         LOOP_FOREVER();
@@ -903,7 +229,7 @@ void main() {
 
     lRetVal = osi_TaskCreate(CommandManagerTask, \
                       (const signed char*)"Process command from controller", \
-                      OSI_STACK_SIZE, (void*) pvParameters, tskIDLE_PRIORITY+2, &pCommandTaskHandle );
+                      OSI_STACK_SIZE, pNetCtx->acBsdRecvBuf, tskIDLE_PRIORITY+2, &pCommandTaskHandle );
     if(lRetVal < 0){
         ERR_PRINT(lRetVal);
         LOOP_FOREVER();
@@ -920,7 +246,7 @@ void main() {
     //
     // Start the task scheduler
     //
-    UART_PRINT("Start scheduler\n\r");
+
     osi_start();
     //LOOP_FOREVER();
 }
