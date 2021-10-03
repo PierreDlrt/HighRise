@@ -28,7 +28,8 @@
 
 // free_rtos/ti-rtos includes
 #include "osi.h"
-#include "heap_3.c"
+#include "FreeRTOS.h"
+#include "task.h"
 
 // common interface includes
 #include "common.h"
@@ -39,16 +40,16 @@
 #include "uart_if.h"
 #endif
 #include "uart.h"
-#include "pinmux.h"
+#include "commons/pinmux.h"
 
 // pinmux include
 #include "hw_gpio.h"
 #include "pin.h"
 #include "gpio.h"
 
-#include "network_utils.h"
-#include "tcp_server.h"
-#include "matekF411_drv.h"
+#include "utils/network_utils.h"
+#include "utils/tcp_server.h"
+#include "driver/matekF411_drv.h"
 
 
 #endif /* CC3200_SDK_H_ */

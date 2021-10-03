@@ -1,10 +1,13 @@
 //****************************************************************************
 //
-//! \addtogroup getting_started_ap
+//! \addtogroup drone_project
 //! @{
 //
 //****************************************************************************
+
 #include "cc3200_sdk.h"
+
+//#include "heap_3.c"
 
 
 #define APP_NAME                "WLAN AP"
@@ -18,15 +21,11 @@
 //
 
 
-#define PORT_NUM            5001
-#define BUF_SIZE            960
 
-
-
-typedef struct {
+/*typedef struct {
     OsiSyncObj_t *pSyncObjStart;
     unsigned short usPort;
-}taskParam;
+}taskParam;*/
 
 
 //*****************************************************************************
@@ -34,7 +33,7 @@ typedef struct {
 //*****************************************************************************
 
 
-OsiMsgQ_t msgQfb = NULL;
+//OsiMsgQ_t msgQfb = NULL;
 
 #if defined(ccs) || defined(gcc)
 extern void (* const g_pfnVectors[])(void);
@@ -187,17 +186,17 @@ void main() {
     //
     // Start the SimpleLink Host
     //
-    OsiSyncObj_t pSyncObjStart;
-    taskParam *pvParameters;
+    //OsiSyncObj_t pSyncObjStart;
+    //taskParam *pvParameters;
     OsiTaskHandle pServerHandle, pCommandTaskHandle;
 
     PNETWORK_CONTEXT pNetCtx = (PNETWORK_CONTEXT) mem_Malloc(sizeof(NETWORK_CONTEXT));
 
-    lRetVal = osi_SyncObjCreate(&pSyncObjStart);
+    /*lRetVal = osi_SyncObjCreate(&pSyncObjStart);
     if(lRetVal < 0) {
         ERR_PRINT(lRetVal);
         LOOP_FOREVER();
-    }
+    }*/
 
     //lRetVal = osi_MsgQCreate(&msgQfb,"FeedBack",);
     if(lRetVal < 0) {
@@ -205,8 +204,8 @@ void main() {
         LOOP_FOREVER();
     }
 
-    pvParameters->pSyncObjStart = &pSyncObjStart;
-    pvParameters->usPort = PORT_NUM;
+    //pvParameters->pSyncObjStart = &pSyncObjStart;
+    //pvParameters->usPort = PORT_NUM;
 
 
     lRetVal = VStartSimpleLinkSpawnTask(SPAWN_TASK_PRIORITY);
@@ -229,7 +228,7 @@ void main() {
 
     lRetVal = osi_TaskCreate(CommandManagerTask, \
                       (const signed char*)"Process command from controller", \
-                      OSI_STACK_SIZE, pNetCtx->acBsdRecvBuf, tskIDLE_PRIORITY+2, &pCommandTaskHandle );
+                      OSI_STACK_SIZE, pNetCtx, tskIDLE_PRIORITY+2, &pCommandTaskHandle );
     if(lRetVal < 0){
         ERR_PRINT(lRetVal);
         LOOP_FOREVER();
