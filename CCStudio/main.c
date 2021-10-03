@@ -20,8 +20,6 @@
 // Values for below macros shall be modified for setting the 'Ping' properties
 //
 
-
-
 /*typedef struct {
     OsiSyncObj_t *pSyncObjStart;
     unsigned short usPort;
@@ -33,6 +31,7 @@
 //*****************************************************************************
 
 
+PNETWORK_CONTEXT pNetCtx = NULL;
 //OsiMsgQ_t msgQfb = NULL;
 
 #if defined(ccs) || defined(gcc)
@@ -116,11 +115,6 @@ void printdBinary(uint16_t dbyte) {
 }
 
 
-
-/*void DroneStatusFeedBack( void *pvParameters ) {
-
-}*/
-
 uint16_t mapValue(uint8_t val, int out_min, int out_max) {
     return val * (out_max - out_min)/255 + out_min;
 }
@@ -162,12 +156,135 @@ BoardInit(void) {
 
 
 
+void SimpleLinkWlanEventHandler(SlWlanEvent_t *pSlWlanEvent){
+
+    switch(pSlWlanEvent->Event){
+        case SL_WLAN_CONNECT_EVENT:
+            SET_STATUS_BIT(pNetCtx->ulStatus, STATUS_BIT_CONNECTION);
+            break;
+
+        case SL_WLAN_DISCONNECT_EVENT:
+        {
+            slWlanConnectAsyncResponse_t*  pEventData = NULL;
+
+            CLR_STATUS_BIT(pNetCtx->ulStatus, STATUS_BIT_CONNECTION);
+            CLR_STATUS_BIT(pNetCtx->ulStatus, STATUS_BIT_IP_AQUIRED);
+
+            pEventData = &pSlWlanEvent->EventData.STAandP2PModeDisconnected;
+
+            // If the user has initiated 'Disconnect' request,
+            //'reason_code' is SL_WLAN_DISCONNECT_USER_INITIATED_DISCONNECTION
+            if(SL_WLAN_DISCONNECT_USER_INITIATED_DISCONNECTION == pEventData->reason_code){
+                UART_PRINT("Device disconnected from the AP on application's "
+                            "request \n\r");
+            }
+            else{
+                UART_PRINT("Device disconnected from the AP on an ERROR..!! \n\r");
+            }
+
+        }
+        break;
+
+        case SL_WLAN_STA_CONNECTED_EVENT:
+            // when device is in AP mode and any client connects to device cc3xxx
+            SET_STATUS_BIT(pNetCtx->ulStatus, STATUS_BIT_CONNECTION);
+            break;
+
+        case SL_WLAN_STA_DISCONNECTED_EVENT:
+            // when client disconnects from device (AP)
+            CLR_STATUS_BIT(pNetCtx->ulStatus, STATUS_BIT_CONNECTION);
+            CLR_STATUS_BIT(pNetCtx->ulStatus, STATUS_BIT_IP_LEASED);
+            break;
+
+        default:
+            UART_PRINT("[WLAN EVENT] Unexpected event \n\r");
+            break;
+    }
+}
+
+void SimpleLinkNetAppEventHandler(SlNetAppEvent_t *pNetAppEvent){
+
+    switch(pNetAppEvent->Event){
+        case SL_NETAPP_IPV4_IPACQUIRED_EVENT:
+        case SL_NETAPP_IPV6_IPACQUIRED_EVENT:
+            SET_STATUS_BIT(pNetCtx->ulStatus, STATUS_BIT_IP_AQUIRED);
+            break;
+
+        case SL_NETAPP_IP_LEASED_EVENT:
+        {
+            SET_STATUS_BIT(pNetCtx->ulStatus, STATUS_BIT_IP_LEASED);
+            pNetCtx->ulStaIp = (pNetAppEvent)->EventData.ipLeased.ip_address;
+            UART_PRINT("[NETAPP EVENT] IP Leased to Client: IP=%d.%d.%d.%d , ",
+                        SL_IPV4_BYTE(pNetCtx->ulStaIp,3), SL_IPV4_BYTE(pNetCtx->ulStaIp,2),
+                        SL_IPV4_BYTE(pNetCtx->ulStaIp,1), SL_IPV4_BYTE(pNetCtx->ulStaIp,0));
+        }
+        break;
+
+        case SL_NETAPP_IP_RELEASED_EVENT:
+            CLR_STATUS_BIT(pNetCtx->ulStatus, STATUS_BIT_IP_LEASED);
+            UART_PRINT("[NETAPP EVENT] IP Released for Client: IP=%d.%d.%d.%d , ",
+                        SL_IPV4_BYTE(pNetCtx->ulStaIp,3), SL_IPV4_BYTE(pNetCtx->ulStaIp,2),
+                        SL_IPV4_BYTE(pNetCtx->ulStaIp,1), SL_IPV4_BYTE(pNetCtx->ulStaIp,0));
+            break;
+
+        default:
+            UART_PRINT("[NETAPP EVENT] Unexpected event [0x%x] \n\r", pNetAppEvent->Event);
+            break;
+    }
+}
+
+
+void SimpleLinkHttpServerCallback(SlHttpServerEvent_t *pHttpEvent,
+                                  SlHttpServerResponse_t *pHttpResponse){
+    // Unused in this application
+}
+
+void SimpleLinkGeneralEventHandler(SlDeviceEvent_t *pDevEvent){
+    //
+    // Most of the general errors are not FATAL are are to be handled
+    // appropriately by the application
+    //
+    UART_PRINT("[GENERAL EVENT] - ID=[%d] Sender=[%d]\n\n",
+               pDevEvent->EventData.deviceEvent.status,
+               pDevEvent->EventData.deviceEvent.sender);
+}
+
+
+void SimpleLinkSockEventHandler(SlSockEvent_t *pSock){
+    //
+    // This application doesn't work w/ socket - Events are not expected
+    //
+    switch( pSock->Event ){
+        case SL_SOCKET_TX_FAILED_EVENT:
+            switch( pSock->socketAsyncEvent.SockTxFailData.status){
+                case SL_ECLOSE:
+                    UART_PRINT("[SOCK ERROR] - close socket (%d) operation "
+                                "failed to transmit all queued packets\n\n",
+                                    pSock->socketAsyncEvent.SockTxFailData.sd);
+                    break;
+                default:
+                    UART_PRINT("[SOCK ERROR] - TX FAILED  :  socket %d , reason "
+                                "(%d) \n\n",
+                                pSock->socketAsyncEvent.SockTxFailData.sd, pSock->socketAsyncEvent.SockTxFailData.status);
+                    break;
+            }
+            break;
+
+        default:
+            UART_PRINT("[SOCK EVENT] - Unexpected Event [%x0x]\n\n",pSock->Event);
+            break;
+    }
+
+}
+
+
 //*****************************************************************************
 //                            MAIN FUNCTION
 //*****************************************************************************
 void main() {
 
     long lRetVal = -1;
+    OsiTaskHandle pServerHandle, pCommandTaskHandle;
 
     BoardInit();
     PinMuxConfig();
@@ -176,37 +293,25 @@ void main() {
     InitTerm();
 #endif
 
+    ClearTerm();
+    DisplayBanner();
+
+    /*
+     * UART configuration for Matek F411
+     */
     MAP_UARTConfigSetExpClk(UARTA1_BASE, MAP_PRCMPeripheralClockGet(PRCM_UARTA1),
                           UART_BAUD_RATE_FCU, (UART_CONFIG_WLEN_8 | UART_CONFIG_STOP_TWO | // UART_CONFIG_STOP_TWO
                           UART_CONFIG_PAR_EVEN)); //UART_BAUD_RATE_FCU // UART_CONFIG_PAR_EVEN
 
-    ClearTerm();
-    DisplayBanner();
+    pNetCtx = (PNETWORK_CONTEXT) mem_Malloc(sizeof(NETWORK_CONTEXT));
 
+    if (pNetCtx == NULL) {
+        Report("Error on network network context creation\r\n");
+        LOOP_FOREVER();
+    }
     //
     // Start the SimpleLink Host
     //
-    //OsiSyncObj_t pSyncObjStart;
-    //taskParam *pvParameters;
-    OsiTaskHandle pServerHandle, pCommandTaskHandle;
-
-    PNETWORK_CONTEXT pNetCtx = (PNETWORK_CONTEXT) mem_Malloc(sizeof(NETWORK_CONTEXT));
-
-    /*lRetVal = osi_SyncObjCreate(&pSyncObjStart);
-    if(lRetVal < 0) {
-        ERR_PRINT(lRetVal);
-        LOOP_FOREVER();
-    }*/
-
-    //lRetVal = osi_MsgQCreate(&msgQfb,"FeedBack",);
-    if(lRetVal < 0) {
-        ERR_PRINT(lRetVal);
-        LOOP_FOREVER();
-    }
-
-    //pvParameters->pSyncObjStart = &pSyncObjStart;
-    //pvParameters->usPort = PORT_NUM;
-
 
     lRetVal = VStartSimpleLinkSpawnTask(SPAWN_TASK_PRIORITY);
     if(lRetVal < 0) {
@@ -234,20 +339,11 @@ void main() {
         LOOP_FOREVER();
     }
 
-    /*lRetVal = osi_TaskCreate(DroneStatusFeedBack, \
-                          (const signed char*)"Send drone state summary", \
-                          OSI_STACK_SIZE, (void*) pvParameters, tskIDLE_PRIORITY+2, &pDroneStatusFB );
-    if(lRetVal < 0){
-        ERR_PRINT(lRetVal);
-        LOOP_FOREVER();
-    }*/
-
     //
     // Start the task scheduler
     //
 
     osi_start();
-    //LOOP_FOREVER();
 }
 
 //*****************************************************************************
